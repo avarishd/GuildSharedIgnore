@@ -1,5 +1,3 @@
-# 🛡️ GuildSharedIgnore
-
 ### Guild-wide shared ignore list for World of Warcraft: Legion 7.3.5
 
 <p align="center">
@@ -116,26 +114,8 @@ Optional `[GSI]` announcements when:
 
 # 📸 Interface
 
-> Screenshots coming soon.
+<img width="650" height="350" alt="image" src="https://i.imgur.com/ktFYIAp.png"/>
 
-The interface provides a single overview of the entire shared list:
-
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ GSI  v3.2                                                     ×     │
-├──────────────────────────────────────────────────────────────────────┤
-│ [Player name]   [Note]            [ ADD ]      [Search...] [SYNC]   │
-│                                                        ✓ Announce    │
-├──────────────────────────────────────────────────────────────────────┤
-│ > PLAYER <       ADDED BY             NOTE              DATE         │
-├──────────────────────────────────────────────────────────────────────┤
-│ Avarishd         Turanius             Toxic player      04/10/26     │
-│ SomePlayer       Byfar                Avoid             03/10/26     │
-│ AnotherPlayer    Avarishd             —                 01/10/26     │
-├──────────────────────────────────────────────────────────────────────┤
-│ GuildSharedIgnore • Avarishd              YOU: 2   TOTAL: 3         │
-└──────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
