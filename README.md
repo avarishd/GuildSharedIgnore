@@ -1,4 +1,4 @@
-### Guild-wide shared ignore list for World of Warcraft: Legion 7.3.5
+# GuildSharedIgnore
 
 <p align="center">
   <strong>One ignore list. One guild. Everyone stays informed.</strong>
@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/World%20of%20Warcraft-Legion%207.3.5-7B68EE?style=for-the-badge" alt="WoW Legion 7.3.5">
   <img src="https://img.shields.io/badge/Interface-70300-58A6FF?style=for-the-badge" alt="Interface 70300">
-  <img src="https://img.shields.io/badge/Version-3.2-20C997?style=for-the-badge" alt="Version 3.2">
+  <img src="https://img.shields.io/badge/Version-4.0-20C997?style=for-the-badge" alt="Version 4.0">
   <img src="https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge" alt="MIT License">
 </p>
 
@@ -15,39 +15,52 @@
 
 ## ✨ What is GuildSharedIgnore?
 
-**GuildSharedIgnore** is a World of Warcraft addon designed for **Legion 7.3.5** that creates a shared ignore list for your guild.
+**GuildSharedIgnore** is a World of Warcraft addon for **Legion 7.3.5** that provides a shared ignore and player-report list for guild members.
 
-Normally, every character has their own individual ignore list. GuildSharedIgnore allows guild members running the addon to **share ignored players, notes, and updates automatically** through WoW's addon communication system.
+Instead of maintaining completely separate lists, guild members running GuildSharedIgnore can share:
 
-No external server or database is required.
+* Ignored players
+* Categories
+* Notes / reports
+* Additions and removals
+* Updates to existing entries
 
-> **If one guild member adds someone to the shared ignore list, everyone running GuildSharedIgnore can receive the entry.**
+Synchronization is handled entirely through **World of Warcraft's addon communication system**.
+
+**No external server, database, or website is required.**
+
+When one guild member adds or updates an entry, other guild members running the addon can receive the change automatically.
 
 ---
 
-## 🚀 Features
+# 🚀 Features
 
 <table>
 <tr>
 <td width="50%">
 
-### 🔴 Shared Ignore List
+### 🔴 Shared Player List
 
-* Guild-wide player list
-* Automatic synchronization
-* Persistent saved data
+* Guild-wide shared player database
 * Add and remove players
-* Import from Blizzard's ignore list
+* Automatic synchronization
+* Manual synchronization
+* Incremental synchronization
+* Persistent saved data
+* Conflict resolution using timestamps
+* Deletion tracking
 
 </td>
 <td width="50%">
 
-### 📝 Notes
+### 📝 Reports & Notes
 
-* Add notes to ignored players
-* Edit notes at any time
-* Notes synchronize between guild members
+* Add a report when adding a player
+* Edit reports at any time
 * 255-character note limit
+* Notes synchronize between guild members
+* Category can be changed while editing
+* Existing reports can be updated without re-adding the player
 
 </td>
 </tr>
@@ -55,9 +68,26 @@ No external server or database is required.
 <tr>
 <td>
 
+### 🏷️ Categories
+
+Entries can be classified as:
+
+* **Toxic**
+* **Bad**
+* **Leaver**
+* **Scammer**
+* **AFK**
+* **Bad Attitude**
+* **Other**
+
+Categories are synchronized together with player entries and reports.
+
+</td>
+<td>
+
 ### 🔍 Search & Sorting
 
-Search by:
+Search the shared list using:
 
 * Player name
 * Added by
@@ -65,20 +95,12 @@ Search by:
 
 Sort by:
 
-* Player A-Z / Z-A
-* Added By A-Z / Z-A
-* Date oldest / newest
+* Player
+* Added By
+* Category
+* Date
 
-</td>
-<td>
-
-### 🛡️ Protection
-
-* Chat filtering
-* Group warnings
-* Party / raid detection
-* Invite blocking
-* Ignored player detection
+Click a column header to switch between ascending and descending order.
 
 </td>
 </tr>
@@ -86,25 +108,66 @@ Sort by:
 <tr>
 <td>
 
-### 📢 Guild Announcements
+### 🛡️ Automatic Protection
 
-Optional `[GSI]` announcements when:
+GuildSharedIgnore can:
 
-* A player is added
-* A player is removed
-* A note is updated
+* Filter chat messages from ignored players
+* Warn when an ignored player joins your party
+* Warn when an ignored player joins your raid
+* Automatically decline party invitations from ignored players
 
 </td>
 <td>
 
-### 🖥️ Modern UI
+### 📢 Guild Announcements
 
-* Dark interface
+Optional `[GSI]` guild announcements can be enabled for:
+
+* Player additions
+* Player removals
+
+Announcements can include:
+
+* Player name
+* Category
+* Report / note
+* Person who performed the action
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+### 🔄 Automatic Synchronization
+
+* Syncs automatically when entering the world
+* Automatically syncs while in a guild
+* Periodic automatic synchronization
+* Manual **SYNC** button
+* Incremental synchronization after the first sync
+* Sync status displayed in the interface
+* Reports number of responders and changes received
+
+</td>
+<td>
+
+### 🖥️ Interface
+
+* Dark themed interface
 * Class-colored player names
-* Resizable window
+* Class-colored guild member names
+* Colored categories
+* Alternating table rows
 * Search field
-* Editable notes
+* Category selector
+* Editable reports
+* Resizable window
 * Keyboard support
+* Sync status display
+* Addon version display
+* Guild addon-user/version information
 
 </td>
 </tr>
@@ -114,8 +177,26 @@ Optional `[GSI]` announcements when:
 
 # 📸 Interface
 
-<img width="650" height="350" alt="image" src="https://i.imgur.com/ktFYIAp.png"/>
+<img width="850" alt="GuildSharedIgnore interface" src="https://i.imgur.com/mwAsYGp.png"/>
 
+The interface displays:
+
+| Column       | Description                                  |
+| :----------- | :------------------------------------------- |
+| **PLAYER**   | Player on the shared list                    |
+| **ADDED BY** | Guild member who originally added the player |
+| **CATEGORY** | Report category                              |
+| **NOTE**     | Report / additional information              |
+| **DATE**     | Date and time of the latest entry update     |
+| **×**        | Remove the player from the shared list       |
+
+The bottom of the interface also shows:
+
+* Your number of entries
+* Total number of entries
+* Addon author
+* GitHub repository
+* Current synchronization state
 
 ---
 
@@ -129,66 +210,390 @@ Type:
 /gsi
 ```
 
-or create a macro:
+The addon interface will open.
+
+You can also create a macro:
 
 ```lua
-/run SlashCmdList["GSI"]()
+/run SlashCmdList["GUILDSHAREDIGNORE"]()
 ```
 
 ---
 
 ## ➕ Add a player
 
-Enter the player's name:
+Enter the player's name in the **Player** field.
+
+Optionally select a category and enter a report:
 
 ```text
-Player name: SomePlayer
-Note: Avoid this player
+Player:   SomePlayer
+Category: Toxic
+Note:     Repeatedly griefed the group
 ```
 
 Then click **ADD** or press **Enter**.
 
-If the Player Name field is empty, GuildSharedIgnore can use your current target.
+### Add your current target
+
+If the **Player** field is empty, GuildSharedIgnore checks your current target.
+
+If your target is a player, the target's name is automatically used.
+
+This makes it possible to:
+
+1. Target a player
+2. Leave the Player field empty
+3. Select a category
+4. Enter a note
+5. Press **ADD**
 
 ---
 
-## 📝 Edit a note
+# 🏷️ Categories
 
-Click the **NOTE** column for an existing player.
+The category selector is available beside the player field.
 
-An editor will open where you can modify the note.
+Current categories:
 
 ```text
-┌──────────────────────────────────────┐
-│ EDIT NOTE                SomePlayer  │
-├──────────────────────────────────────┤
-│ [ Avoid this player...             ] │
-│                                      │
-│                    [ CANCEL ] [ SAVE ]│
-└──────────────────────────────────────┘
+Toxic
+Bad
+Leaver
+Scammer
+AFK
+Bad Attitude
+Other
 ```
 
----
+Categories are displayed with different colors in the player list.
 
-## ❌ Remove a player
-
-Click the **×** button at the right side of the player's row.
-
-The removal is then synchronized with the guild.
+Categories are also synchronized with the rest of the entry.
 
 ---
 
-## 🔄 Synchronize
+# 📝 Edit a report
 
-Click **SYNC** to request the latest shared ignore data from guild members.
+Click the **NOTE** area of an existing entry.
 
-Synchronization happens through WoW's addon communication system.
+The report editor will open.
+
+```text
+┌──────────────────────────────────────────────┐
+│ EDIT REPORT                                  │
+├──────────────────────────────────────────────┤
+│ Player: SomePlayer                           │
+│                                              │
+│ [ Repeatedly griefed the group...          ] │
+│                                              │
+│ [ Toxic ▼ ]        Category                  │
+│                                              │
+│                         [ SAVE ] [ CANCEL ]   │
+└──────────────────────────────────────────────┘
+```
+
+The editor allows you to change:
+
+* Report text
+* Category
+
+Reports are limited to **255 characters**.
+
+Press **Enter** to save or **Escape** to cancel.
+
+Changes are synchronized with other GuildSharedIgnore users in the guild.
+
+---
+
+# ❌ Remove a player
+
+Click the **×** button on the right side of the player's row.
+
+The entry is removed locally and a removal update is sent to other GuildSharedIgnore users.
+
+GuildSharedIgnore keeps deletion information so that an older copy of an entry cannot simply reappear during synchronization.
+
+---
+
+# 🔄 Synchronization
+
+GuildSharedIgnore synchronizes through WoW's guild addon messaging channel.
+
+### Automatic synchronization
+
+The addon automatically performs synchronization:
+
+* Shortly after loading while in a guild
+* When entering the world
+* Periodically while in a guild
+
+The periodic automatic synchronization interval is **5 minutes**.
+
+### Manual synchronization
+
+Click:
+
+```text
+SYNC
+```
+
+or use:
+
+```text
+/gsi sync
+```
+
+The addon determines whether it can perform an incremental synchronization based on its previous synchronization state.
+
+The interface displays synchronization status such as:
+
+```text
+SYNC: READY
+SYNC: SYNCING • Incremental
+SYNC: OK • Incremental • 2 responder(s)
+SYNC: FAILED
+```
+
+A completed synchronization reports how many entries were:
+
+* Added locally
+* Updated
+* Deleted
+
+---
+
+# 📡 Communication
+
+GuildSharedIgnore uses WoW's addon messaging system.
+
+### Addon prefix
+
+```text
+GSIgnore
+```
+
+Messages are sent through:
+
+```text
+GUILD
+```
+
+The synchronization system supports:
+
+* Player additions
+* Player removals
+* Report/category updates
+* Synchronization requests
+* Version information
+* Chunked synchronization data
+* Deletion data
+* Synchronization completion
+
+Large synchronization datasets are split into smaller packets to remain within WoW addon-message size limits.
+
+The synchronization system also uses timestamps and update information to determine which version of an entry is newer.
+
+---
+
+# 🧠 Synchronization & Conflict Handling
+
+GuildSharedIgnore does not simply overwrite local data whenever another guild member sends an update.
+
+Entries contain update information that allows the addon to compare changes.
+
+Updates are evaluated using:
+
+1. Timestamp
+2. Updating player name as a deterministic tie-breaker
+
+This helps prevent older information from overwriting newer information.
+
+### Deletions
+
+Removed entries are tracked using **tombstones**.
+
+This prevents a deleted player from being accidentally restored by an older copy of the shared database during synchronization.
+
+---
+
+# 🛡️ Protection
+
+GuildSharedIgnore can use the shared database to warn you about players before or while interacting with them.
+
+## Chat filtering
+
+Messages from players on the GuildSharedIgnore list can be filtered from supported chat channels.
+
+Supported message types include:
+
+* Say
+* Yell
+* Whispers
+* Party
+* Party Leader
+* Raid
+* Raid Leader
+* Raid Warning
+* Guild
+* Officer
+* Channel
+* Battleground
+* Battleground Leader
+
+The addon filters messages based on the sender being present on the shared list.
+
+---
+
+## 👥 Party & raid warnings
+
+When a group is formed or the group roster changes, GuildSharedIgnore checks the members against the shared list.
+
+If an ignored player is detected, the addon displays a warning containing information such as:
+
+```text
+[GSI WARNING] SomePlayer is on the GuildSharedIgnore list [Toxic]: Report text
+```
+
+Raid groups can also receive a raid-warning notification.
+
+Warnings are tracked so the same player is not repeatedly announced every time the roster is checked.
+
+---
+
+## 🚫 Party invite protection
+
+If an ignored player sends a party invitation, GuildSharedIgnore can automatically decline the invitation.
+
+The addon also hides the relevant party-invite popup when possible.
+
+A message is displayed in chat indicating that the invitation was automatically declined.
+
+---
+
+# 📢 Guild Announcements
+
+Guild announcements are optional.
+
+Enable:
+
+```text
+☑ Announce
+```
+
+in the main interface.
+
+When enabled, GuildSharedIgnore can announce additions and removals to guild chat.
+
+### Addition
+
+Example:
+
+```text
+[GSI] SomePlayer added by Avarishd [Toxic]: Repeated griefing
+```
+
+### Removal
+
+Example:
+
+```text
+[GSI] SomePlayer removed by Avarishd [Toxic]: Repeated griefing
+```
+
+The category is omitted when it is `Other`.
+
+The report is omitted when no report exists.
+
+---
+
+# 💾 Saved Data
+
+GuildSharedIgnore uses the saved variable:
+
+```text
+GuildSharedIgnoreDB
+```
+
+The main shared player database is stored under:
+
+```lua
+GuildSharedIgnoreDB.players
+```
+
+Deletion tracking is stored under:
+
+```lua
+GuildSharedIgnoreDB.tombstones
+```
+
+The addon also stores synchronization state, including its last successful synchronization time.
+
+Data persists between game sessions.
+
+---
+
+# 📥 Blizzard Ignore List Import
+
+GuildSharedIgnore automatically checks Blizzard's normal ignore list.
+
+Players already present in the Blizzard ignore list can be imported into GuildSharedIgnore.
+
+Imported entries use:
+
+```text
+Note:     Ignore List
+Category: Other
+```
+
+The importing character is recorded as the player who added the entry.
+
+---
+
+# 🔢 Addon Version Detection
+
+GuildSharedIgnore tracks the addon versions currently detected among guild members using the addon.
+
+The interface displays the local addon version.
+
+Hovering over the version displays information about detected GuildSharedIgnore users and their versions.
+
+The highest detected version is shown, and the local version is marked as outdated when a newer addon version is detected in the guild.
+
+This makes it easier for guild members to identify outdated installations.
+
+---
+
+# 🖥️ Interface Controls
+
+The main interface provides:
+
+```text
+Player...       → Player to add
+Category        → Report category
+Note...         → Report text
+ADD             → Add player
+Search          → Search the shared list
+SYNC            → Request synchronization
+Announce        → Enable/disable guild announcements
+```
+
+Additional controls include:
+
+* Click column headers to sort
+* Click a report to edit it
+* Click × to remove an entry
+* Drag the header to move the window
+* Drag the bottom-right corner to resize it
+* Press Escape to close active editors/popups
+* Right-click supported controls to clear input fields
 
 ---
 
 # 🔎 Search
 
-The search field can match:
+The search field can search the shared list.
+
+It matches against:
 
 ```text
 Player name
@@ -202,21 +607,32 @@ For example:
 Search: toxic
 ```
 
-will find entries where `toxic` appears in the player's name, the person who added them, or their note.
+can find entries containing `toxic` in the player name, the person who added the entry, or the report.
+
+Search results update as you type.
 
 ---
 
 # ↕️ Sorting
 
-Click the column headers to change sorting.
+Click a column header to sort the list.
 
-### Player
+Supported columns:
+
+```text
+PLAYER
+ADDED BY
+CATEGORY
+DATE
+```
+
+The active sort direction is shown using arrows:
 
 ```text
 > PLAYER <
 ```
 
-A-Z
+Ascending.
 
 Click again:
 
@@ -224,61 +640,25 @@ Click again:
 < PLAYER >
 ```
 
-Z-A
+Descending.
 
-The same system is available for:
-
-* **ADDED BY**
-* **DATE**
+The same behavior is available for the other sortable columns.
 
 ---
 
-# 📡 Communication
+# 🎨 Class Colors
 
-GuildSharedIgnore communicates through WoW's addon messaging system.
+Player names and guild-member names can be displayed using their WoW class colors.
 
-### Addon prefix
+Guild class information is obtained from the guild roster.
 
-```text
-GSIgnore
-```
-
-### Message types
-
-| Type | Purpose                 |
-| :--: | ----------------------- |
-|  `A` | Add player              |
-|  `R` | Remove player           |
-|  `N` | Update note             |
-|  `Q` | Request synchronization |
-|  `S` | Synchronization data    |
-|  `E` | End synchronization     |
-
-No external service is required.
-
----
-
-# 💾 Saved Data
-
-GuildSharedIgnore uses:
-
-```text
-GuildSharedIgnoreDB
-```
-
-The shared player database is stored under:
-
-```lua
-GuildSharedIgnoreDB.players
-```
-
-Data persists between game sessions.
+This makes it easier to identify players at a glance without changing the underlying player data.
 
 ---
 
 # 📁 Installation
 
-Download the repository and place the addon folder inside:
+Download or clone the repository and place the addon folder inside:
 
 ```text
 World of Warcraft/
@@ -287,18 +667,20 @@ World of Warcraft/
         └── GuildSharedIgnore/
 ```
 
-The folder should contain:
+The addon folder should contain:
 
 ```text
 GuildSharedIgnore/
 ├── GuildSharedIgnore.toc
 ├── GuildSharedIgnore.lua
-└── GuildSharedIgnore_GUI.lua
+├── GuildSharedIgnore_GUI.lua
+├── LICENSE
+└── README.md
 ```
 
 Restart the game or reload your UI.
 
-Then use:
+Then type:
 
 ```text
 /gsi
@@ -315,7 +697,7 @@ Then use:
 | Modern Retail             |       ❌ Not supported       |
 | Classic                   |       ❌ Not supported       |
 
-> GuildSharedIgnore targets the **Legion 7.3.5 API (`70300`)**.
+> GuildSharedIgnore is designed for the **Legion 7.3.5 API (`70300`)**.
 
 ---
 
@@ -327,18 +709,30 @@ GuildSharedIgnore/
 ├── 📄 GuildSharedIgnore.toc
 │
 ├── 📜 GuildSharedIgnore.lua
-│   ├── Shared database
+│   ├── Saved database
+│   ├── Player normalization
 │   ├── Add / remove logic
-│   ├── Synchronization
+│   ├── Report / category updates
+│   ├── Blizzard ignore import
+│   ├── Guild synchronization
+│   ├── Incremental synchronization
+│   ├── Deletion tracking
+│   ├── Version tracking
 │   ├── Chat filtering
 │   ├── Group detection
+│   ├── Party invite protection
 │   └── Guild communication
 │
 ├── 📜 GuildSharedIgnore_GUI.lua
 │   ├── Main interface
+│   ├── Player entry
+│   ├── Category selector
+│   ├── Report editor
 │   ├── Search
 │   ├── Sorting
-│   ├── Notes
+│   ├── Sync controls
+│   ├── Version display
+│   ├── Guild addon-user information
 │   └── Resizable UI
 │
 ├── 📄 LICENSE
@@ -363,7 +757,7 @@ Please open an issue and include:
 Example:
 
 ```text
-Version: 3.2
+Version: 3.5
 WoW: Legion 7.3.5
 
 Error:
@@ -372,24 +766,44 @@ attempt to index field 'foo' (a nil value)
 
 Steps:
 1. Open /gsi
-2. Click NOTE
-3. Click SAVE
-4. Error occurs
+2. Click a NOTE
+3. Edit the report
+4. Click SAVE
+5. Error occurs
 ```
+
+The more information provided, the easier the issue is to reproduce and fix.
 
 ---
 
 # 💡 Feature Requests
 
-Have an idea?
+Have an idea for GuildSharedIgnore?
 
 Open an issue describing:
 
 1. What you want added
-2. How it should work
+2. How you expect it to work
 3. Why it would be useful
+4. Any UI or synchronization considerations
 
-Pull requests are also welcome.
+Pull requests are welcome.
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+Before submitting a pull request:
+
+* Keep compatibility with the Legion 7.3.5 API in mind
+* Avoid relying on modern Retail-only APIs
+* Test synchronization between multiple addon users where possible
+* Test both additions and removals
+* Test report/category updates
+* Test group and invite protection
+* Include useful information when fixing a bug
 
 ---
 
