@@ -1,20 +1,27 @@
-# GuildSharedIgnore
+# 🛡️ GuildSharedIgnore
+
+<p align="center">
+  <img src="https://img.shields.io/badge/World%20of%20Warcraft-Legion%207.3.5-7B68EE?style=for-the-badge" alt="WoW Legion 7.3.5">
+  <img src="https://img.shields.io/badge/Interface-70300-58A6FF?style=for-the-badge" alt="Interface 70300">
+  <img src="https://img.shields.io/badge/Version-45.0-20C997?style=for-the-badge" alt="Version 5.0">
+  <img src="https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge" alt="MIT License">
+</p>
 
 **A shared player-report list for World of Warcraft guilds.**
 
 GuildSharedIgnore is made for **Legion 7.3.5 (Interface 70300)**. Guild members with the addon can share player names, categories, and notes through WoW's addon messaging. No external service is needed.
 
-## Features
+## ✨ Features
 
-- Add, edit, search, sort, and remove player reports.
-- Sync list changes with guild members who use the addon.
-- Filter messages from listed players, warn about them in your party or raid, and automatically decline their party invitations.
-- Optionally announce list changes in guild chat or mute the addon's chat messages.
-- Import WoW's Ignore List into a hidden **Ignore List** category.
-- Adjust the interface opacity and resize the window.
-- Undo your most recent confirmed removal during the current session.
+- 📝 Add, edit, search, sort, and remove player reports.
+- 🔄 Sync list changes with guild members who use the addon.
+- 🛡️ Filter messages from listed players, warn about them in your party or raid, and automatically decline their party invitations.
+- 📢 Optionally announce list changes in guild chat or mute the addon's chat messages.
+- 📥 Import WoW's Ignore List into a hidden **Ignore List** category.
+- 🎨 Adjust the interface opacity and resize the window.
+- ↩️ Undo your most recent confirmed removal during the current session.
 
-## Install
+## 📦 Install
 
 Place the `GuildSharedIgnore` folder in:
 
@@ -24,7 +31,7 @@ World of Warcraft/Interface/AddOns/
 
 Restart or reload the UI, then enter `/gsi`.
 
-## Using the list
+## 🎮 Using the list
 
 Enter a player name, choose a category, and optionally add a note, then click **ADD**. If the name field is empty, the addon uses your player target when possible.
 
@@ -32,7 +39,7 @@ Click a report's note to edit it. Click **×** and confirm to remove a player. *
 
 Use the search field to find players by name, who added them, category, or note. Click **PLAYER**, **ADDED BY**, **CATEGORY**, or **DATE** to sort.
 
-## Sync and settings
+## ⚙️ Sync and settings
 
 Sync starts automatically while you are in a guild and repeats every five minutes. You can also click **SYNC** or use `/gsi sync`. The interface shows sync status and the results.
 
@@ -51,26 +58,26 @@ Other commands:
 /gsi version  Show addon version information
 ```
 
-## WoW Ignore List imports
+## 📥 WoW Ignore List imports
 
 GuildSharedIgnore **reads from but never changes WoW's Ignore List**. Players on that list are imported into GSI with an empty note and the hidden **Ignore List** category. If you remove a player from WoW's Ignore List, GSI removes the corresponding imported entry for the character that imported it. Manually categorized entries and imports belonging to other characters are left alone.
 
 The importing character is recorded as the entry's author. Deleting an imported GSI entry while the player is still on WoW's Ignore List does not prevent it from being imported again later.
 
-## Categories and protection
+## 🏷️ Categories and protection
 
 Selectable categories are **Toxic**, **Bad**, **Leaver**, **Scammer**, **AFK**, **Bad Attitude**, and **Other**. Imported Ignore List entries use a separate hidden category.
 
 Protection checks the shared list to filter supported chat messages, warn when a listed player joins your party or raid, and decline their party invitations. These features do not add or remove players from WoW's Ignore List.
 
-## Compatibility
+## 🧩 Compatibility
 
 GuildSharedIgnore targets **Legion 7.3.5**. Modern Retail and Classic are not supported.
 
-## Reporting a problem
+## 🐛 Reporting a problem
 
 When opening an issue, include your WoW version, addon version, the full Lua error, what you were doing, and steps to reproduce it.
 
-## License
+## 📜 License
 
 Released under the [MIT License](LICENSE).
