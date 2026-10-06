@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/World%20of%20Warcraft-Legion%207.3.5-7B68EE?style=for-the-badge" alt="WoW Legion 7.3.5">
   <img src="https://img.shields.io/badge/Interface-70300-58A6FF?style=for-the-badge" alt="Interface 70300">
-  <img src="https://img.shields.io/badge/Version-45.0-20C997?style=for-the-badge" alt="Version 5.0">
+  <img src="https://img.shields.io/badge/Version-5.0-20C997?style=for-the-badge" alt="Version 5.0">
   <img src="https://img.shields.io/badge/License-MIT-F7DF1E?style=for-the-badge" alt="MIT License">
 </p>
 
