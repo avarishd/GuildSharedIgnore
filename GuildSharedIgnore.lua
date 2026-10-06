@@ -87,6 +87,7 @@ local function InitializeDB()
     GuildSharedIgnoreDB.protocol=PROTOCOL
     if GuildSharedIgnoreDB.announceGuild==nil then GuildSharedIgnoreDB.announceGuild=false end
     if GuildSharedIgnoreDB.muteMessages==nil then GuildSharedIgnoreDB.muteMessages=true end
+    if GuildSharedIgnoreDB.confirmDelete==nil then GuildSharedIgnoreDB.confirmDelete=true end
     local maxRevision=GuildSharedIgnoreDB.logicalClock
     for key,e in pairs(GuildSharedIgnoreDB.players) do
         if e then
@@ -285,12 +286,16 @@ local function FinishSync(success,detail)
     local imported,updated,deleted=ProcessSyncBuffers(); syncImported=imported; syncUpdated=updated; syncDeleted=deleted
     local complete=0; local partial=0
     for _,v in pairs(syncExpected) do if v.complete then complete=complete+1 else partial=partial+1 end end
+    local responders=CountResponders()
     syncActive=false; syncLastComplete=time(); GuildSharedIgnoreDB.lastSyncTime=syncLastComplete; syncNextAuto=syncLastComplete+AUTO_SYNC_INTERVAL
     local text=detail or "Complete"
-    if success then text=text.." • "..complete.." responder(s)"; if partial>0 then text=text.." • "..partial.." incomplete" end end
+    if success then
+        text=text.." • "..responders.." responder(s)"
+        if partial>0 then text=text.." • "..complete.." complete, "..partial.." incomplete" end
+    end
     UpdateSyncStatus(success and "Complete" or "Failed",text)
     if GSI.RefreshVersionDisplay then GSI.RefreshVersionDisplay() end
-    if success then Print("Sync complete. "..complete.." responder(s), "..imported.." new, "..updated.." updated, "..deleted.." deleted.") end
+    if success then Print("Sync complete. "..responders.." responder(s), "..complete.." complete, "..partial.." incomplete; "..imported.." new, "..updated.." updated, "..deleted.." deleted.") end
 end
 local function AllExpectedComplete()
     local any=false

@@ -35,7 +35,7 @@ Restart or reload the UI, then enter `/gsi`.
 
 Enter a player name, choose a category, and optionally add a note, then click **ADD**. If the name field is empty, the addon uses your player target when possible.
 
-Click a report's note to edit it. Click **×** and confirm to remove a player. **UNDO** restores the most recently removed entry, including its note and category. Undo is available only until another entry is removed or the current session ends.
+Click a report's note to edit it. Click **×** to remove a player; confirmation can be turned on or off in Settings. **UNDO** restores the most recently removed entry, including its note and category. Undo is available only until another entry is removed or the current session ends.
 
 Use the search field to find players by name, who added them, category, or note. Click **PLAYER**, **ADDED BY**, **CATEGORY**, or **DATE** to sort.
 
@@ -48,6 +48,7 @@ Open the gear menu to:
 - Set background opacity from 20% to 100%.
 - Toggle guild announcements for additions, edits, and removals.
 - Mute the addon's chat messages. Group warnings remain visible.
+- Turn the delete confirmation on or off (on by default).
 
 Other commands:
 

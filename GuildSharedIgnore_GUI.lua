@@ -2,7 +2,7 @@ local ADDON_NAME="GuildSharedIgnore"
 GSI=GSI or {}
 local frame,headerFrame,scrollFrame,scrollChild
 local playerBox,noteBox,searchBox,categoryDropDown
-local announceCheck,announceText,muteCheck,muteText
+local announceCheck,announceText,muteCheck,muteText,deleteConfirmCheck,deleteConfirmText
 local undoButton,lastRemovedEntry
 local rows,visibleRows={},{}
 local noteEditorFrame,noteEditorBox,noteEditorCategory
@@ -12,6 +12,7 @@ local sortColumn="player"
 local sortAscending=true
 local RefreshList
 local AnnounceRemovedPlayer
+local RemoveEntry
 local versionText,githubCopyFrame,footerGithub
 local syncStatusText
 local categoryDropDownCounter=0
@@ -484,7 +485,11 @@ if row.entryName then
 local name=row.entryName
 local entry=GSI.GetEntry and GSI.GetEntry(name)
 if entry then
+if GuildSharedIgnoreDB.confirmDelete then
 StaticPopup_Show("GSI_CONFIRM_REMOVE",name,nil,{name=name})
+else
+RemoveEntry(name)
+end
 end
 end
 end)
@@ -1005,14 +1010,9 @@ end
 end
 return success
 end
-StaticPopupDialogs["GSI_CONFIRM_REMOVE"]={
-text="Remove %s from the GuildSharedIgnore list?",
-button1=YES,
-button2=NO,
-OnAccept=function(self,data)
-if data and data.name then
-local entry=GSI.GetEntry and GSI.GetEntry(data.name)
-if entry and GSI.RemovePlayer(data.name) then
+RemoveEntry=function(name)
+local entry=GSI.GetEntry and GSI.GetEntry(name)
+if entry and GSI.RemovePlayer(name) then
 lastRemovedEntry={
 name=entry.name,
 addedBy=entry.addedBy,
@@ -1020,9 +1020,17 @@ note=entry.note,
 category=entry.category
 }
 SetUndoButtonEnabled(true)
-AnnounceRemovedPlayer(data.name,entry.note,entry.category)
+AnnounceRemovedPlayer(name,entry.note,entry.category)
 RefreshList()
 end
+end
+StaticPopupDialogs["GSI_CONFIRM_REMOVE"]={
+text="Remove %s from the GuildSharedIgnore list?",
+button1=YES,
+button2=NO,
+OnAccept=function(self,data)
+if data and data.name then
+RemoveEntry(data.name)
 end
 end,
 timeout=0,
@@ -1146,7 +1154,7 @@ settingsHighlight:SetSize(18,18)
 settingsHighlight:ClearAllPoints()
 settingsHighlight:SetPoint("CENTER")
 settingsPanel=CreateFrame("Frame",nil,frame)
-settingsPanel:SetSize(250,174)
+settingsPanel:SetSize(250,210)
 settingsPanel:SetFrameStrata("DIALOG")
 settingsPanel:SetFrameLevel(frame:GetFrameLevel()+100)
 settingsPanel:EnableMouse(true)
@@ -1380,6 +1388,39 @@ GuildSharedIgnoreDB.muteMessages=checked and true or false
 muteMark:SetShown(checked)
 if checked then
 SetFontStringColor(muteMark,GREEN[1],GREEN[2],GREEN[3])
+end
+end)
+deleteConfirmCheck=CreateFrame("CheckButton",nil,settingsPanel)
+deleteConfirmCheck:SetSize(26,26)
+deleteConfirmCheck:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",12,-169)
+deleteConfirmCheck:SetFrameLevel(settingsPanel:GetFrameLevel()+2)
+deleteConfirmCheck:EnableMouse(true)
+ApplyBackdrop(deleteConfirmCheck,BG,BORDER)
+local deleteConfirmMark=deleteConfirmCheck:CreateFontString(nil,"OVERLAY","GameFontNormal")
+deleteConfirmMark:SetAllPoints()
+deleteConfirmMark:SetText("X")
+deleteConfirmMark:SetJustifyH("CENTER")
+deleteConfirmMark:SetJustifyV("MIDDLE")
+SetFontStringColor(deleteConfirmMark,GREEN[1],GREEN[2],GREEN[3])
+deleteConfirmCheck.mark=deleteConfirmMark
+deleteConfirmText=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormal")
+deleteConfirmText:SetPoint("LEFT",deleteConfirmCheck,"RIGHT",7,0)
+deleteConfirmText:SetText("Confirm delete")
+SetFontStringColor(deleteConfirmText,TEXT[1],TEXT[2],TEXT[3])
+SetToggleTooltip(deleteConfirmCheck,deleteConfirmCheck,"Confirm before deleting","Show a confirmation dialog before removing a player from the shared list.")
+deleteConfirmCheck:SetChecked(GuildSharedIgnoreDB.confirmDelete)
+deleteConfirmMark:SetShown(GuildSharedIgnoreDB.confirmDelete)
+deleteConfirmCheck:SetScript("OnMouseDown",function(self,button)
+if button=="RightButton" then
+ClearInputFields()
+end
+end)
+deleteConfirmCheck:SetScript("OnClick",function(self)
+local checked=self:GetChecked()
+GuildSharedIgnoreDB.confirmDelete=checked and true or false
+deleteConfirmMark:SetShown(checked)
+if checked then
+SetFontStringColor(deleteConfirmMark,GREEN[1],GREEN[2],GREEN[3])
 end
 end)
 local tableHeader=CreateFrame("Frame",nil,frame)
