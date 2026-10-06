@@ -131,10 +131,12 @@ local function CompareVersions(a,b)
     if a3~=b3 then return a3>b3 and 1 or -1 end
     return 0
 end
+local NotifyIfAddonOutdated
 local function RegisterAddonUser(name,version,protocol)
     name=Normalize(name); version=tostring(version or ""); protocol=tonumber(protocol) or 0
     if not name or version=="" then return end
     addonUsers[Key(name)]={name=name,version=version,protocol=protocol,lastSeen=time()}
+    NotifyIfAddonOutdated()
 end
 local function PruneAddonUsers()
     local now=time()
@@ -150,6 +152,15 @@ local function GetHighestAddonVersion()
     local high=VERSION
     for _,u in ipairs(GetAddonUsers()) do if CompareVersions(u.version,high)>0 then high=u.version end end
     return high
+end
+local outdatedWarningShown=false
+NotifyIfAddonOutdated=function()
+    if outdatedWarningShown then return end
+    local highestVersion=GetHighestAddonVersion()
+    if not highestVersion or CompareVersions(VERSION,highestVersion)>=0 then return end
+    if GuildSharedIgnoreDB and GuildSharedIgnoreDB.muteMessages then return end
+    outdatedWarningShown=true
+    Print("Your GuildSharedIgnore addon is outdated. Please update to v"..tostring(highestVersion)..".")
 end
 local function RefreshStatus() if GSI.RefreshSyncStatus then GSI.RefreshSyncStatus() end end
 local function UpdateSyncStatus(status,detail) syncStatus=status or "Idle"; syncStatusDetail=detail or ""; RefreshStatus() end
@@ -295,7 +306,10 @@ local function FinishSync(success,detail)
     end
     UpdateSyncStatus(success and "Complete" or "Failed",text)
     if GSI.RefreshVersionDisplay then GSI.RefreshVersionDisplay() end
-    if success then Print("Sync complete. "..responders.." responder(s), "..complete.." complete, "..partial.." incomplete; "..imported.." new, "..updated.." updated, "..deleted.." deleted.") end
+    if success then
+        NotifyIfAddonOutdated()
+        Print("Sync complete. "..responders.." responder(s), "..complete.." complete, "..partial.." incomplete; "..imported.." new, "..updated.." updated, "..deleted.." deleted.")
+    end
 end
 local function AllExpectedComplete()
     local any=false
