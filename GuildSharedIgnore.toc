@@ -2,7 +2,7 @@
 ## Title: GuildSharedIgnore
 ## Notes: |cff58A6FFGuild-wide shared ignore list|r
 ## Author: |cffABD473Avarishd|r
-## Version: 4.1
+## Version: 5.0
 ## SavedVariables: GuildSharedIgnoreDB
 ## X-GitHub: |cff58A6FFgithub.com/avarishd|r
 
