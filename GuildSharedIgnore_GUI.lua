@@ -2,10 +2,12 @@ local ADDON_NAME="GuildSharedIgnore"
 GSI=GSI or {}
 local frame,headerFrame,scrollFrame,scrollChild
 local playerBox,noteBox,searchBox,categoryDropDown
-local announceCheck,announceText
+local announceCheck,announceText,muteCheck,muteText
+local undoButton,lastRemovedEntry
 local rows,visibleRows={},{}
 local noteEditorFrame,noteEditorBox,noteEditorCategory
 local noteEditorTarget,editingNoteFor
+local settingsButton,settingsPanel,settingsOpacitySlider,settingsOpacityText
 local sortColumn="player"
 local sortAscending=true
 local RefreshList
@@ -28,13 +30,16 @@ local RED={1.00,0.20,0.20}
 local ORANGE={1.00,0.55,0.15}
 local HUNTER_GREEN={0.671,0.831,0.451}
 local SKY_BLUE={0.345,0.651,1.00}
+local guiAlpha=1
+local guiAlphaTextures={}
 local CATEGORY_COLORS={
-["Toxic"]={1.00,0.25,0.25},
-["Bad"]={1.00,0.55,0.15},
-["Leaver"]={1.00,0.75,0.20},
-["Scammer"]={0.95,0.30,0.90},
-["AFK"]={0.65,0.65,0.70},
-["Bad Attitude"]={0.85,0.35,0.35},
+["Toxic"]={0.95,0.28,0.28},
+["Bad"]={1.00,0.52,0.18},
+["Leaver"]={0.95,0.72,0.22},
+["Scammer"]={0.82,0.38,0.88},
+["AFK"]={0.58,0.68,0.82},
+["Bad Attitude"]={0.92,0.42,0.52},
+["Ignore List"]={0.40,0.72,0.82},
 ["Other"]={0.70,0.74,0.80}
 }
 local function ClearInputBox(box)
@@ -51,20 +56,93 @@ box:ClearFocus()
 end
 end
 end
+local function SetGuiTextureColor(texture,r,g,b,a)
+guiAlphaTextures[texture]={r,g,b,a}
+texture:SetColorTexture(r,g,b,a*guiAlpha)
+end
+local function SetGuiAlpha(alpha)
+guiAlpha=math.max(0.2,math.min(1,tonumber(alpha) or 1))
+GuildSharedIgnoreDB.guiAlpha=guiAlpha
+for texture,color in pairs(guiAlphaTextures) do
+texture:SetColorTexture(color[1],color[2],color[3],color[4]*guiAlpha)
+end
+if settingsOpacitySlider then
+settingsOpacitySlider:SetValue(guiAlpha)
+end
+if settingsOpacityText then
+settingsOpacityText:SetText(tostring(math.floor(guiAlpha*100+0.5)).."%")
+end
+end
+local function SetBackdropFill(object,color)
+SetGuiTextureColor(object.gsiBackdropFill,color[1],color[2],color[3],color[4])
+end
+local function SetBackdropBorder(object,color)
+for _,edge in pairs(object.gsiBackdropBorder) do
+edge:SetColorTexture(color[1],color[2],color[3],color[4])
+end
+end
 local function ApplyBackdrop(object,bg,border)
-object:SetBackdrop({
-bgFile="Interface\Buttons\WHITE8X8",
-edgeFile="Interface\Buttons\WHITE8X8",
-edgeSize=1,
-insets={left=1,right=1,top=1,bottom=1}
-})
-object:SetBackdropColor(bg[1],bg[2],bg[3],bg[4])
-object:SetBackdropBorderColor(border[1],border[2],border[3],border[4])
+object.gsiBackdropFill=object:CreateTexture(nil,"ARTWORK")
+object.gsiBackdropFill:SetPoint("TOPLEFT",object,"TOPLEFT",1,-1)
+object.gsiBackdropFill:SetPoint("BOTTOMRIGHT",object,"BOTTOMRIGHT",-1,1)
+SetBackdropFill(object,bg)
+local top=object:CreateTexture(nil,"ARTWORK")
+top:SetPoint("TOPLEFT",object,"TOPLEFT")
+top:SetPoint("TOPRIGHT",object,"TOPRIGHT")
+top:SetHeight(1)
+local bottom=object:CreateTexture(nil,"ARTWORK")
+bottom:SetPoint("BOTTOMLEFT",object,"BOTTOMLEFT")
+bottom:SetPoint("BOTTOMRIGHT",object,"BOTTOMRIGHT")
+bottom:SetHeight(1)
+local left=object:CreateTexture(nil,"ARTWORK")
+left:SetPoint("TOPLEFT",object,"TOPLEFT")
+left:SetPoint("BOTTOMLEFT",object,"BOTTOMLEFT")
+left:SetWidth(1)
+local right=object:CreateTexture(nil,"ARTWORK")
+right:SetPoint("TOPRIGHT",object,"TOPRIGHT")
+right:SetPoint("BOTTOMRIGHT",object,"BOTTOMRIGHT")
+right:SetWidth(1)
+object.gsiBackdropBorder={top=top,bottom=bottom,left=left,right=right}
+SetBackdropBorder(object,border)
 end
 local function SetFontStringColor(fontString,r,g,b,a)
 if fontString then
 fontString:SetTextColor(r,g,b,a or 1)
 end
+end
+local function SetToggleTooltip(target,owner,title,description)
+target:EnableMouse(true)
+target:SetScript("OnEnter",function()
+GameTooltip:SetOwner(owner,"ANCHOR_TOP")
+GameTooltip:SetText(title,1,1,1)
+GameTooltip:AddLine(description,0.75,0.78,0.82,true)
+GameTooltip:Show()
+end)
+target:SetScript("OnLeave",function()
+GameTooltip:Hide()
+end)
+end
+local function UpdateUndoButtonAppearance(enabled)
+if not undoButton then
+return
+end
+local text=undoButton:GetFontString()
+if enabled then
+SetBackdropFill(undoButton,PANEL2)
+SetBackdropBorder(undoButton,BORDER)
+SetFontStringColor(text,TEXT[1],TEXT[2],TEXT[3])
+else
+SetBackdropFill(undoButton,PANEL)
+SetBackdropBorder(undoButton,BORDER)
+SetFontStringColor(text,MUTED[1],MUTED[2],MUTED[3])
+end
+end
+local function SetUndoButtonEnabled(enabled)
+if not undoButton then
+return
+end
+undoButton:SetEnabled(enabled)
+UpdateUndoButtonAppearance(enabled)
 end
 local function MakeButton(parent,width,height,text)
 local button=CreateFrame("Button",nil,parent)
@@ -74,12 +152,12 @@ button:SetText(text)
 button:SetNormalFontObject(GameFontNormalSmall)
 button:SetHighlightFontObject(GameFontHighlightSmall)
 button:SetScript("OnEnter",function(self)
-self:SetBackdropColor(0.075,0.12,0.17,1)
-self:SetBackdropBorderColor(ACCENT[1],ACCENT[2],ACCENT[3],1)
+SetBackdropFill(self,{0.075,0.12,0.17,1})
+SetBackdropBorder(self,ACCENT)
 end)
 button:SetScript("OnLeave",function(self)
-self:SetBackdropColor(PANEL2[1],PANEL2[2],PANEL2[3],1)
-self:SetBackdropBorderColor(BORDER[1],BORDER[2],BORDER[3],1)
+SetBackdropFill(self,PANEL2)
+SetBackdropBorder(self,BORDER)
 end)
 return button
 end
@@ -106,11 +184,11 @@ end
 box:SetScript("OnTextChanged",UpdateHint)
 box:SetScript("OnEditFocusGained",function(self)
 hint:Hide()
-self:SetBackdropBorderColor(ACCENT[1],ACCENT[2],ACCENT[3],1)
+SetBackdropBorder(self,ACCENT)
 end)
 box:SetScript("OnEditFocusLost",function(self)
 UpdateHint()
-self:SetBackdropBorderColor(BORDER[1],BORDER[2],BORDER[3],1)
+SetBackdropBorder(self,BORDER)
 end)
 box:SetScript("OnEscapePressed",function(self)
 if self.clearOnEscape then
@@ -183,10 +261,7 @@ option:SetHeight(25)
 option:SetPoint("TOPLEFT",menu,"TOPLEFT",1,-1-(i-1)*25)
 option:SetPoint("TOPRIGHT",menu,"TOPRIGHT",-1,-1-(i-1)*25)
 option.category=category
-local optionBG=option:CreateTexture(nil,"BACKGROUND")
-optionBG:SetAllPoints()
-optionBG:SetColorTexture(PANEL2[1],PANEL2[2],PANEL2[3],1)
-option.background=optionBG
+ApplyBackdrop(option,PANEL2,BORDER)
 local optionText=option:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
 optionText:SetPoint("LEFT",option,"LEFT",8,0)
 optionText:SetPoint("RIGHT",option,"RIGHT",-5,0)
@@ -196,11 +271,12 @@ local r,g,b=GetCategoryColor(category)
 SetFontStringColor(optionText,r,g,b)
 option.text=optionText
 option:SetScript("OnEnter",function(self)
-self.background:SetColorTexture(0.075,0.12,0.17,1)
-self:SetBackdropBorderColor(ACCENT[1],ACCENT[2],ACCENT[3],1)
+SetBackdropFill(self,{0.075,0.12,0.17,1})
+SetBackdropBorder(self,ACCENT)
 end)
 option:SetScript("OnLeave",function(self)
-self.background:SetColorTexture(PANEL2[1],PANEL2[2],PANEL2[3],1)
+SetBackdropFill(self,PANEL2)
+SetBackdropBorder(self,BORDER)
 end)
 option:SetScript("OnClick",function(self)
 dropDown.selectedCategory=self.category
@@ -210,11 +286,11 @@ end)
 end
 menu:SetHeight(table.getn(categories)*25+2)
 button:SetScript("OnEnter",function()
-dropDown:SetBackdropBorderColor(ACCENT[1],ACCENT[2],ACCENT[3],1)
+SetBackdropBorder(dropDown,ACCENT)
 end)
 button:SetScript("OnLeave",function()
 if not menu:IsShown() then
-dropDown:SetBackdropBorderColor(BORDER[1],BORDER[2],BORDER[3],1)
+SetBackdropBorder(dropDown,BORDER)
 end
 end)
 button:SetScript("OnClick",function()
@@ -227,7 +303,7 @@ menu:ClearAllPoints()
 menu:SetPoint("TOPLEFT",dropDown,"BOTTOMLEFT",0,-2)
 menu:Show()
 openCategoryMenu=menu
-dropDown:SetBackdropBorderColor(ACCENT[1],ACCENT[2],ACCENT[3],1)
+SetBackdropBorder(dropDown,ACCENT)
 end)
 dropDown.selectedCategory="Other"
 SetCategoryText(dropDown,"Other")
@@ -235,11 +311,29 @@ return dropDown
 end
 local function CloseNoteEditor()
 editingNoteFor=nil
+CloseCategoryMenu()
 if noteEditorFrame then
 noteEditorFrame:Hide()
 end
 if frame then
 frame:EnableKeyboard(true)
+end
+end
+local function CloseUIOnEscape()
+if noteEditorFrame and noteEditorFrame:IsShown() then
+noteEditorFrame:SetPropagateKeyboardInput(false)
+CloseNoteEditor()
+end
+CloseCategoryMenu()
+if githubCopyFrame then
+githubCopyFrame:Hide()
+end
+if settingsPanel then
+settingsPanel:Hide()
+end
+if frame then
+frame:SetPropagateKeyboardInput(false)
+frame:Hide()
 end
 end
 local function SaveNoteEditor()
@@ -269,7 +363,7 @@ noteEditorFrame:SetPropagateKeyboardInput(true)
 noteEditorFrame:RegisterForDrag("LeftButton")
 ApplyBackdrop(noteEditorFrame,BG,BORDER)
 local bar=noteEditorFrame:CreateTexture(nil,"ARTWORK")
-bar:SetColorTexture(PANEL2[1],PANEL2[2],PANEL2[3],1)
+SetGuiTextureColor(bar,PANEL2[1],PANEL2[2],PANEL2[3],1)
 bar:SetPoint("TOPLEFT",1,-1)
 bar:SetPoint("TOPRIGHT",-1,-1)
 bar:SetHeight(34)
@@ -302,11 +396,11 @@ self:StopMovingOrSizing()
 end)
 noteEditorFrame:SetScript("OnKeyDown",function(self,key)
 if key=="ESCAPE" then
-CloseNoteEditor()
+CloseUIOnEscape()
 end
 end)
 noteEditorBox:SetScript("OnEnterPressed",SaveNoteEditor)
-noteEditorBox:SetScript("OnEscapePressed",CloseNoteEditor)
+noteEditorBox:SetScript("OnEscapePressed",CloseUIOnEscape)
 noteEditorFrame:Hide()
 end
 local function OpenNoteEditor(name)
@@ -327,6 +421,7 @@ frame:EnableKeyboard(false)
 end
 noteEditorFrame:Show()
 noteEditorFrame:Raise()
+noteEditorFrame:SetPropagateKeyboardInput(true)
 noteEditorBox:SetFocus()
 end
 local function CreateRow(index)
@@ -354,13 +449,13 @@ ClearInputFields()
 end
 end)
 row.noteButton:SetScript("OnEnter",function()
-row:SetBackdropColor(0.20,0.22,0.25,1)
+SetBackdropFill(row,{0.20,0.22,0.25,1})
 end)
 row.noteButton:SetScript("OnLeave",function()
 if row.alt then
-row:SetBackdropColor(PANEL_ALT[1],PANEL_ALT[2],PANEL_ALT[3],1)
+SetBackdropFill(row,PANEL_ALT)
 else
-row:SetBackdropColor(PANEL[1],PANEL[2],PANEL[3],1)
+SetBackdropFill(row,PANEL)
 end
 end)
 row.noteButton:SetScript("OnClick",function()
@@ -691,13 +786,13 @@ if not frame then
 return
 end
 if status=="Complete" then
-frame:SetBackdropBorderColor(GREEN[1],GREEN[2],GREEN[3],1)
+SetBackdropBorder(frame,GREEN)
 elseif status=="Failed" then
-frame:SetBackdropBorderColor(RED[1],RED[2],RED[3],1)
+SetBackdropBorder(frame,RED)
 elseif status=="Syncing" then
-frame:SetBackdropBorderColor(ACCENT[1],ACCENT[2],ACCENT[3],1)
+SetBackdropBorder(frame,ACCENT)
 else
-frame:SetBackdropBorderColor(BORDER[1],BORDER[2],BORDER[3],1)
+SetBackdropBorder(frame,BORDER)
 end
 end
 local function UpdateSyncStatus()
@@ -776,9 +871,9 @@ row:ClearAllPoints()
 row:SetPoint("TOPLEFT",scrollChild,"TOPLEFT",0,-(i-1)*23)
 row:SetWidth(scrollChild:GetWidth())
 if row.alt then
-row:SetBackdropColor(PANEL_ALT[1],PANEL_ALT[2],PANEL_ALT[3],PANEL_ALT[4])
+SetBackdropFill(row,PANEL_ALT)
 else
-row:SetBackdropColor(PANEL[1],PANEL[2],PANEL[3],PANEL[4])
+SetBackdropFill(row,PANEL)
 end
 row.player:SetText(entry.name or "")
 SetFontStringColor(row.player,TEXT[1],TEXT[2],TEXT[3])
@@ -918,6 +1013,13 @@ OnAccept=function(self,data)
 if data and data.name then
 local entry=GSI.GetEntry and GSI.GetEntry(data.name)
 if entry and GSI.RemovePlayer(data.name) then
+lastRemovedEntry={
+name=entry.name,
+addedBy=entry.addedBy,
+note=entry.note,
+category=entry.category
+}
+SetUndoButtonEnabled(true)
 AnnounceRemovedPlayer(data.name,entry.note,entry.category)
 RefreshList()
 end
@@ -932,6 +1034,7 @@ local function CreateUI()
 if frame then
 return
 end
+SetGuiAlpha(GuildSharedIgnoreDB.guiAlpha or 1)
 frame=CreateFrame("Frame","GuildSharedIgnoreFrame",UIParent)
 frame:SetSize(850,470)
 frame:SetPoint("CENTER")
@@ -951,30 +1054,17 @@ end
 end)
 frame:SetScript("OnKeyDown",function(self,key)
 if key=="ESCAPE" then
-if noteEditorFrame and noteEditorFrame:IsShown() then
-CloseNoteEditor()
-return
-end
-if githubCopyFrame and githubCopyFrame:IsShown() then
-githubCopyFrame:Hide()
-return
-end
-if openCategoryMenu then
-CloseCategoryMenu()
-return
-end
-ClearInputFields()
-self:Hide()
+CloseUIOnEscape()
 end
 end)
 headerFrame=CreateFrame("Frame",nil,frame)
 headerFrame:SetPoint("TOPLEFT",frame,"TOPLEFT",1,-1)
 headerFrame:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-1,-1)
-headerFrame:SetHeight(55)
+headerFrame:SetHeight(45)
 headerFrame:EnableMouse(true)
 headerFrame:SetFrameLevel(51)
 local headerBG=headerFrame:CreateTexture(nil,"BACKGROUND")
-headerBG:SetColorTexture(0.035,0.045,0.058,1)
+SetGuiTextureColor(headerBG,0.035,0.045,0.058,1)
 headerBG:SetAllPoints()
 local logo=headerFrame:CreateFontString(nil,"OVERLAY","GameFontNormal")
 logo:SetPoint("TOPLEFT",headerFrame,"TOPLEFT",13,-7)
@@ -1035,7 +1125,95 @@ text:SetTextColor(0.65,0.68,0.74)
 end
 end)
 close:SetScript("OnClick",function()
+if settingsPanel then
+settingsPanel:Hide()
+end
 frame:Hide()
+end)
+settingsButton=CreateFrame("Button",nil,frame)
+settingsButton:SetSize(36,36)
+settingsButton:SetPoint("RIGHT",close,"LEFT",2,0)
+settingsButton:SetFrameLevel(close:GetFrameLevel())
+settingsButton:EnableMouse(true)
+settingsButton:SetNormalTexture("Interface\\Buttons\\UI-OptionsButton")
+local settingsIcon=settingsButton:GetNormalTexture()
+settingsIcon:SetSize(18,18)
+settingsIcon:ClearAllPoints()
+settingsIcon:SetPoint("CENTER")
+settingsButton:SetHighlightTexture("Interface\\Buttons\\UI-OptionsButton","ADD")
+local settingsHighlight=settingsButton:GetHighlightTexture()
+settingsHighlight:SetSize(18,18)
+settingsHighlight:ClearAllPoints()
+settingsHighlight:SetPoint("CENTER")
+settingsPanel=CreateFrame("Frame",nil,frame)
+settingsPanel:SetSize(250,174)
+settingsPanel:SetFrameStrata("DIALOG")
+settingsPanel:SetFrameLevel(frame:GetFrameLevel()+100)
+settingsPanel:EnableMouse(true)
+settingsPanel:SetScript("OnMouseDown",function() end)
+settingsPanel:SetScript("OnMouseUp",function() end)
+ApplyBackdrop(settingsPanel,PANEL,BORDER)
+settingsPanel:SetPoint("TOPRIGHT",settingsButton,"BOTTOMRIGHT",0,-4)
+local settingsHeader=settingsPanel:CreateTexture(nil,"BACKGROUND")
+settingsHeader:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",1,-1)
+settingsHeader:SetPoint("TOPRIGHT",settingsPanel,"TOPRIGHT",-1,-1)
+settingsHeader:SetHeight(30)
+settingsHeader:SetColorTexture(0.035,0.045,0.058,1)
+local settingsTitle=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormal")
+settingsTitle:SetPoint("LEFT",settingsPanel,"TOPLEFT",11,-15)
+settingsTitle:SetText("SETTINGS")
+SetFontStringColor(settingsTitle,ACCENT[1],ACCENT[2],ACCENT[3])
+local opacityTitle=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+opacityTitle:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",12,-40)
+opacityTitle:SetText("Background opacity")
+SetFontStringColor(opacityTitle,TEXT[1],TEXT[2],TEXT[3])
+settingsOpacityText=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+settingsOpacityText:SetPoint("TOPRIGHT",settingsPanel,"TOPRIGHT",-12,-40)
+SetFontStringColor(settingsOpacityText,ACCENT[1],ACCENT[2],ACCENT[3])
+settingsOpacitySlider=CreateFrame("Slider","GuildSharedIgnoreOpacitySlider",settingsPanel,"OptionsSliderTemplate")
+settingsOpacitySlider:SetOrientation("HORIZONTAL")
+settingsOpacitySlider:SetMinMaxValues(0.2,1)
+settingsOpacitySlider:SetValueStep(0.05)
+settingsOpacitySlider:SetObeyStepOnDrag(true)
+settingsOpacitySlider:SetWidth(220)
+settingsOpacitySlider:SetHeight(16)
+settingsOpacitySlider:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",15,-59)
+local opacityLow=_G[settingsOpacitySlider:GetName().."Low"]
+local opacityHigh=_G[settingsOpacitySlider:GetName().."High"]
+opacityLow:SetText("20%")
+opacityHigh:SetText("100%")
+opacityLow:SetTextColor(MUTED[1],MUTED[2],MUTED[3])
+opacityHigh:SetTextColor(MUTED[1],MUTED[2],MUTED[3])
+_G[settingsOpacitySlider:GetName().."Text"]:SetText("")
+local settingsDivider=settingsPanel:CreateTexture(nil,"ARTWORK")
+settingsDivider:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",10,-91)
+settingsDivider:SetPoint("TOPRIGHT",settingsPanel,"TOPRIGHT",-10,-91)
+settingsDivider:SetHeight(1)
+settingsDivider:SetColorTexture(BORDER[1],BORDER[2],BORDER[3],1)
+settingsOpacitySlider:SetScript("OnValueChanged",function(self,value)
+SetGuiAlpha(value)
+end)
+SetGuiAlpha(guiAlpha)
+settingsPanel:Hide()
+settingsButton:SetScript("OnClick",function()
+if settingsPanel:IsShown() then
+settingsPanel:Hide()
+else
+settingsOpacitySlider:SetValue(guiAlpha)
+settingsPanel:Show()
+settingsPanel:Raise()
+end
+end)
+settingsButton:SetScript("OnEnter",function(self)
+settingsIcon:SetVertexColor(0.60,0.85,1)
+GameTooltip:SetOwner(self,"ANCHOR_TOP")
+GameTooltip:SetText("Settings",1,1,1)
+GameTooltip:AddLine("Adjust GUI opacity, guild announcements, and addon messages.",0.75,0.78,0.82,true)
+GameTooltip:Show()
+end)
+settingsButton:SetScript("OnLeave",function()
+settingsIcon:SetVertexColor(1,1,1)
+GameTooltip:Hide()
 end)
 headerFrame:SetScript("OnMouseDown",function(self,button)
 if button=="RightButton" then
@@ -1052,16 +1230,16 @@ end)
 playerBox=MakeEditBox(frame,110,28,"Player...")
 playerBox.clearOnEscape=true
 playerBox.clearOnRightClick=true
-playerBox:SetPoint("TOPLEFT",frame,"TOPLEFT",10,-64)
+playerBox:SetPoint("TOPLEFT",frame,"TOPLEFT",10,-49)
 categoryDropDown=CreateCategoryDropDown(frame,105,28)
-categoryDropDown:SetPoint("LEFT",playerBox,"RIGHT",-2,0)
+categoryDropDown:SetPoint("LEFT",playerBox,"RIGHT",6,0)
 noteBox=MakeEditBox(frame,160,28,"Note...")
 noteBox.clearOnEscape=true
 noteBox.clearOnRightClick=true
 noteBox:SetMaxLetters(255)
-noteBox:SetPoint("LEFT",categoryDropDown,"RIGHT",-4,0)
+noteBox:SetPoint("LEFT",categoryDropDown,"RIGHT",6,0)
 local add=MakeButton(frame,52,28,"ADD")
-add:SetPoint("LEFT",noteBox,"RIGHT",5,0)
+add:SetPoint("LEFT",noteBox,"RIGHT",6,0)
 add:SetScript("OnClick",function()
 AddFromFields()
 end)
@@ -1074,7 +1252,7 @@ end)
 searchBox=MakeEditBox(frame,175,28,"Search players / notes...")
 searchBox.clearOnEscape=true
 searchBox.clearOnRightClick=true
-searchBox:SetPoint("LEFT",add,"RIGHT",12,0)
+searchBox:SetPoint("LEFT",add,"RIGHT",6,0)
 searchBox:SetScript("OnTextChanged",function(self)
 if self:GetText()=="" and not self:HasFocus() then
 self.hint:Show()
@@ -1087,7 +1265,7 @@ searchBox:SetScript("OnEnterPressed",function(self)
 self:ClearFocus()
 end)
 local sync=MakeButton(frame,52,28,"SYNC")
-sync:SetPoint("LEFT",searchBox,"RIGHT",5,0)
+sync:SetPoint("LEFT",searchBox,"RIGHT",6,0)
 sync:SetScript("OnMouseDown",function(self,button)
 if button=="RightButton" then
 ClearInputFields()
@@ -1096,10 +1274,52 @@ end)
 sync:SetScript("OnClick",function()
 GSI.RequestSync()
 end)
-announceCheck=CreateFrame("CheckButton",nil,frame)
-announceCheck:SetSize(18,18)
-announceCheck:SetPoint("LEFT",sync,"RIGHT",10,0)
-announceCheck:SetFrameLevel(60)
+undoButton=MakeButton(frame,58,28,"UNDO")
+undoButton:SetPoint("LEFT",sync,"RIGHT",6,0)
+undoButton:SetScript("OnMouseDown",function(self,button)
+if button=="RightButton" then
+ClearInputFields()
+end
+end)
+undoButton:SetScript("OnClick",function()
+local entry=lastRemovedEntry
+if not entry then
+return
+end
+if GSI.GetEntry(entry.name) then
+lastRemovedEntry=nil
+SetUndoButtonEnabled(false)
+if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffGuildSharedIgnore|r: Cannot undo removal because "..entry.name.." is already on the list.")
+end
+return
+end
+if GSI.AddPlayer(entry.name,entry.note,entry.addedBy,entry.category) then
+lastRemovedEntry=nil
+SetUndoButtonEnabled(false)
+AnnounceAddedPlayer(entry.name,entry.note,entry.category,"added")
+RefreshList()
+end
+end)
+undoButton:SetScript("OnEnter",function(self)
+if self:IsEnabled() then
+SetBackdropFill(self,{0.075,0.12,0.17,1})
+SetBackdropBorder(self,ACCENT)
+GameTooltip:SetOwner(self,"ANCHOR_TOP")
+GameTooltip:SetText("Undo last removal",1,1,1)
+GameTooltip:AddLine("Restore the most recently removed player.",0.75,0.78,0.82,true)
+GameTooltip:Show()
+end
+end)
+undoButton:SetScript("OnLeave",function()
+GameTooltip:Hide()
+UpdateUndoButtonAppearance(undoButton:IsEnabled())
+end)
+SetUndoButtonEnabled(false)
+announceCheck=CreateFrame("CheckButton",nil,settingsPanel)
+announceCheck:SetSize(26,26)
+announceCheck:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",12,-101)
+announceCheck:SetFrameLevel(settingsPanel:GetFrameLevel()+2)
 announceCheck:EnableMouse(true)
 ApplyBackdrop(announceCheck,BG,BORDER)
 local check=announceCheck:CreateFontString(nil,"OVERLAY","GameFontNormal")
@@ -1109,10 +1329,11 @@ check:SetJustifyH("CENTER")
 check:SetJustifyV("MIDDLE")
 SetFontStringColor(check,GREEN[1],GREEN[2],GREEN[3])
 announceCheck.mark=check
-announceText=frame:CreateFontString(nil,"OVERLAY","GameFontDisableSmall")
-announceText:SetPoint("LEFT",announceCheck,"RIGHT",5,0)
+announceText=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormal")
+announceText:SetPoint("LEFT",announceCheck,"RIGHT",7,0)
 announceText:SetText("Announce")
-SetFontStringColor(announceText,MUTED[1],MUTED[2],MUTED[3])
+SetFontStringColor(announceText,TEXT[1],TEXT[2],TEXT[3])
+SetToggleTooltip(announceCheck,announceCheck,"Guild announcements","When enabled, adding, updating, or removing a player announces the change in guild chat.")
 announceCheck:SetChecked(GuildSharedIgnoreDB.announceGuild)
 check:SetShown(GuildSharedIgnoreDB.announceGuild)
 announceCheck:SetScript("OnMouseDown",function(self,button)
@@ -1128,9 +1349,42 @@ if checked then
 SetFontStringColor(check,GREEN[1],GREEN[2],GREEN[3])
 end
 end)
+muteCheck=CreateFrame("CheckButton",nil,settingsPanel)
+muteCheck:SetSize(26,26)
+muteCheck:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",12,-135)
+muteCheck:SetFrameLevel(settingsPanel:GetFrameLevel()+2)
+muteCheck:EnableMouse(true)
+ApplyBackdrop(muteCheck,BG,BORDER)
+local muteMark=muteCheck:CreateFontString(nil,"OVERLAY","GameFontNormal")
+muteMark:SetAllPoints()
+muteMark:SetText("X")
+muteMark:SetJustifyH("CENTER")
+muteMark:SetJustifyV("MIDDLE")
+SetFontStringColor(muteMark,GREEN[1],GREEN[2],GREEN[3])
+muteCheck.mark=muteMark
+muteText=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormal")
+muteText:SetPoint("LEFT",muteCheck,"RIGHT",7,0)
+muteText:SetText("Mute")
+SetFontStringColor(muteText,TEXT[1],TEXT[2],TEXT[3])
+SetToggleTooltip(muteCheck,muteCheck,"Mute addon messages","Suppresses GuildSharedIgnore chat messages. Warnings about listed players in your group will still be shown.")
+muteCheck:SetChecked(GuildSharedIgnoreDB.muteMessages)
+muteMark:SetShown(GuildSharedIgnoreDB.muteMessages)
+muteCheck:SetScript("OnMouseDown",function(self,button)
+if button=="RightButton" then
+ClearInputFields()
+end
+end)
+muteCheck:SetScript("OnClick",function(self)
+local checked=self:GetChecked()
+GuildSharedIgnoreDB.muteMessages=checked and true or false
+muteMark:SetShown(checked)
+if checked then
+SetFontStringColor(muteMark,GREEN[1],GREEN[2],GREEN[3])
+end
+end)
 local tableHeader=CreateFrame("Frame",nil,frame)
-tableHeader:SetPoint("TOPLEFT",frame,"TOPLEFT",9,-100)
-tableHeader:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-27,-100)
+tableHeader:SetPoint("TOPLEFT",frame,"TOPLEFT",9,-85)
+tableHeader:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-27,-85)
 tableHeader:SetHeight(25)
 tableHeader:EnableMouse(true)
 tableHeader:SetScript("OnMouseDown",function(self,button)
@@ -1166,7 +1420,7 @@ frame.sortAdded=MakeHeaderButton(tableHeader,hAdded,"addedBy")
 frame.sortCategory=MakeHeaderButton(tableHeader,hCategory,"category")
 frame.sortDate=MakeHeaderButton(tableHeader,hDate,"date")
 scrollFrame=CreateFrame("ScrollFrame",nil,frame,"UIPanelScrollFrameTemplate")
-scrollFrame:SetPoint("TOPLEFT",frame,"TOPLEFT",9,-128)
+scrollFrame:SetPoint("TOPLEFT",frame,"TOPLEFT",9,-113)
 scrollFrame:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT",-27,31)
 scrollFrame:EnableMouse(true)
 scrollFrame:SetScript("OnMouseDown",function(self,button)
@@ -1243,10 +1497,10 @@ SetFontStringColor(count,MUTED[1],MUTED[2],MUTED[3])
 frame.count=count
 frame:SetResizable(true)
 local minimumWidth=700
-local announceRight=announceText:GetRight()
+local controlsRight=undoButton:GetRight()
 local frameLeft=frame:GetLeft()
-if announceRight and frameLeft then
-local requiredWidth=announceRight-frameLeft+12
+if controlsRight and frameLeft then
+local requiredWidth=controlsRight-frameLeft+12
 if requiredWidth>minimumWidth then
 minimumWidth=requiredWidth
 end

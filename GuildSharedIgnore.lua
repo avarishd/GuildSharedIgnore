@@ -13,6 +13,7 @@ local syncID=nil
 local syncStartedAt=0
 local syncResponders={}
 local syncExpected={}
+local syncIgnoredSenders={}
 local syncChunks={}
 local syncDeleteChunks={}
 local syncImported=0
@@ -32,8 +33,12 @@ local importBatches={}
 local CATEGORIES={"Toxic","Bad","Leaver","Scammer","AFK","Bad Attitude","Other"}
 local CATEGORY_LOOKUP={}
 for _,v in ipairs(CATEGORIES) do CATEGORY_LOOKUP[string.lower(v)]=v end
+CATEGORY_LOOKUP["ignore list"]="Ignore List"
 local chatFilterEvents={"CHAT_MSG_SAY","CHAT_MSG_YELL","CHAT_MSG_WHISPER","CHAT_MSG_WHISPER_INFORM","CHAT_MSG_PARTY","CHAT_MSG_PARTY_LEADER","CHAT_MSG_INSTANCE_CHAT","CHAT_MSG_INSTANCE_CHAT_LEADER","CHAT_MSG_RAID","CHAT_MSG_RAID_LEADER","CHAT_MSG_RAID_WARNING","CHAT_MSG_GUILD","CHAT_MSG_OFFICER","CHAT_MSG_CHANNEL","CHAT_MSG_BATTLEGROUND","CHAT_MSG_BATTLEGROUND_LEADER"}
-local function Print(msg) if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffGuildSharedIgnore|r: "..tostring(msg)) end end
+local function Print(msg,always)
+    if not always and GuildSharedIgnoreDB and GuildSharedIgnoreDB.muteMessages then return end
+    if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffGuildSharedIgnore|r: "..tostring(msg)) end
+end
 local function Normalize(name)
     if not name then return nil end
     name=tostring(name):gsub("^%s+",""):gsub("%s+$","")
@@ -43,6 +48,10 @@ end
 local function Key(name)
     name=Normalize(name)
     return name and string.lower(name) or nil
+end
+local function ClassKey(name)
+    local key=Key(name)
+    return key and (key:match("^([^%-]+)") or key) or nil
 end
 local function Encode(s)
     s=tostring(s or "")
@@ -55,16 +64,29 @@ end
 local function SanitizeCategory(category) category=tostring(category or "Other"); return CATEGORY_LOOKUP[string.lower(category)] or "Other" end
 local function SanitizeNote(note) note=tostring(note or ""):gsub("\r"," "):gsub("\n"," "); if #note>255 then note=note:sub(1,255) end; return note end
 local function LocalName() return Normalize(UnitName("player")) or "Unknown" end
+local function IsLocalSender(sender)
+    local senderName,senderRealm=tostring(sender or ""):match("^([^-]+)%-(.+)$")
+    if not senderName then return Key(sender)==Key(LocalName()) end
+    if Key(senderName)~=Key(LocalName()) then return false end
+    local localRealm=GetRealmName and GetRealmName() or ""
+    local function RealmKey(realm)
+        return tostring(realm or ""):lower():gsub("[%s%-']", "")
+    end
+    return localRealm~="" and RealmKey(senderRealm)==RealmKey(localRealm)
+end
 local function InitializeDB()
     GuildSharedIgnoreDB=GuildSharedIgnoreDB or {}
     GuildSharedIgnoreDB.players=GuildSharedIgnoreDB.players or {}
     GuildSharedIgnoreDB.tombstones=GuildSharedIgnoreDB.tombstones or {}
+    GuildSharedIgnoreDB.characterClasses=GuildSharedIgnoreDB.characterClasses or {}
+    if type(GuildSharedIgnoreDB.characterClasses)~="table" then GuildSharedIgnoreDB.characterClasses={} end
     GuildSharedIgnoreDB.changeLog=GuildSharedIgnoreDB.changeLog or {}
     GuildSharedIgnoreDB.logicalClock=tonumber(GuildSharedIgnoreDB.logicalClock) or 0
     GuildSharedIgnoreDB.databaseRevision=tonumber(GuildSharedIgnoreDB.databaseRevision) or 0
     GuildSharedIgnoreDB.lastSyncTime=tonumber(GuildSharedIgnoreDB.lastSyncTime) or 0
     GuildSharedIgnoreDB.protocol=PROTOCOL
     if GuildSharedIgnoreDB.announceGuild==nil then GuildSharedIgnoreDB.announceGuild=false end
+    if GuildSharedIgnoreDB.muteMessages==nil then GuildSharedIgnoreDB.muteMessages=true end
     local maxRevision=GuildSharedIgnoreDB.logicalClock
     for key,e in pairs(GuildSharedIgnoreDB.players) do
         if e then
@@ -279,11 +301,11 @@ local function RequestSync()
     if not IsInGuild() then UpdateSyncStatus("Failed","Not in a guild"); return false end
     if syncActive then return false end
     InitializeDB(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL)
-    syncID=GenerateSyncID(); syncStartedAt=time(); syncResponders={}; syncExpected={}; syncChunks={}; syncDeleteChunks={}; syncImported=0; syncUpdated=0; syncDeleted=0; syncActive=true
+    syncID=GenerateSyncID(); syncStartedAt=time(); syncResponders={}; syncExpected={}; syncIgnoredSenders={}; syncChunks={}; syncDeleteChunks={}; syncImported=0; syncUpdated=0; syncDeleted=0; syncActive=true
     UpdateSyncStatus("Syncing","Database comparison")
     local msg="Q|"..PROTOCOL.."|"..syncID.."|"..Encode(LocalName()).."|"..BuildDatabaseHash().."|"..Encode(VERSION).."|"..tostring(GuildSharedIgnoreDB.lastSyncTime or 0)
     if not SendAddon(msg) then syncActive=false; UpdateSyncStatus("Failed","Addon messaging unavailable"); return false end
-    if C_Timer and C_Timer.After then C_Timer.After(SYNC_TIMEOUT,function() if not syncActive then return end; if AllExpectedComplete() then FinishSync(true,"Complete") elseif CountResponders()>0 then FinishSync(true,"Partial") else FinishSync(false,"Timed out; no compatible responder") end end) end
+    if C_Timer and C_Timer.After then C_Timer.After(SYNC_TIMEOUT,function() if not syncActive then return end; if AllExpectedComplete() then FinishSync(true,"Complete") elseif CountResponders()>0 then FinishSync(true,"Partial") else FinishSync(false,"Timed out; no compatible responder • 0 responders") end end) end
     return true
 end
 local function HandleChunk(sender,rid,kind,seq,total,checksum,payload)
@@ -314,7 +336,7 @@ local function FinalizeResponder(sender,rid,mode,ec,dc,et,dt,hash)
 end
 local function HandleMessage(prefix,message,distribution,sender)
     if prefix~=PREFIX or not message then return end
-    sender=Normalize(sender or ""); if not sender or Key(sender)==Key(LocalName()) then return end
+    sender=Normalize(sender or ""); if not sender or IsLocalSender(sender) then return end
     local op=message:sub(1,2)
     if op=="Q|" then
         local protocol,id,requester,hash,version,lastSync=message:match("^Q|(%d+)|([^|]+)|([^|]*)|([^|]*)|([^|]*)|(%d+)$")
@@ -349,17 +371,21 @@ local function HandleMessage(prefix,message,distribution,sender)
     if op=="V|" then
         local protocol,rid,name,version,mode,ec,dc,hash=message:match("^V|(%d+)|([^|]+)|([^|]*)|([^|]*)|([^|]*)|(%d+)|(%d+)|([^|]*)$")
         if not protocol or tonumber(protocol)~=PROTOCOL or rid~=syncID then return end
+        local peerName=Decode(name)
+        if Key(peerName)==Key(LocalName()) then syncIgnoredSenders[Key(sender)]=true; return end
         local sk=Key(sender); RegisterAddonUser(Decode(name),Decode(version),tonumber(protocol)); syncResponders[sk]=true
         local d=syncExpected[sk] or {}
         d.entries=d.entries or {}; d.deletes=d.deletes or {}; d.entryChunks=d.entryChunks or 0; d.deleteChunks=d.deleteChunks or 0; d.entryTotal=tonumber(ec) or 0; d.deleteTotal=tonumber(dc) or 0; d.hash=hash or ""; d.complete=false; d.invalid=d.invalid or false; d.mode=mode; syncExpected[sk]=d
         return
     end
     if op=="D|" then
+        if syncIgnoredSenders[Key(sender)] then return end
         local rid,kind,seq,total,checksum,payload=message:match("^D|([^|]+)|([ST])|(%d+)|(%d+)|([^|]+)|(.+)$")
         if rid then HandleChunk(sender,rid,kind,seq,total,checksum,payload) end
         return
     end
     if op=="E|" then
+        if syncIgnoredSenders[Key(sender)] then return end
         local rid,mode,ec,dc,et,dt,hash=message:match("^E|([^|]+)|([^|]*)|(%d+)|(%d+)|(%d+)|(%d+)|([^|]*)$")
         if rid then FinalizeResponder(sender,rid,mode,ec,dc,et,dt,hash) end
         return
@@ -398,29 +424,49 @@ local function SendImportBatch(items)
 end
 local function ImportBlizzardIgnoreList()
     if not GetNumIgnores or not GetIgnoreName then return end
-    InitializeDB(); local total=tonumber(GetNumIgnores()) or 0; local imported={}
+    InitializeDB(); local total=tonumber(GetNumIgnores()) or 0; local imported={}; local ignored={}; local importCount=0
     for i=1,total do
         local name=Normalize(GetIgnoreName(i)); local key=Key(name)
-        if key and not GuildSharedIgnoreDB.players[key] and not GuildSharedIgnoreDB.tombstones[key] then
-            local ok=GSI.AddPlayer(name,"Ignore List",LocalName(),"Other",false)
-            if ok then local e=GuildSharedIgnoreDB.players[key]; if e then imported[#imported+1]=BuildEntryPacket(e) end end
+        if key then
+            ignored[key]=name
+            local entry=GuildSharedIgnoreDB.players[key]
+            local isLegacyImport=entry and entry.category=="Other" and entry.note=="Ignore List"
+            if not entry or isLegacyImport then
+                local addedBy=entry and entry.addedBy or LocalName()
+                local ok=GSI.AddPlayer(name,"",addedBy,"Ignore List",false)
+                if ok then local updated=GuildSharedIgnoreDB.players[key]; if updated then imported[#imported+1]=BuildEntryPacket(updated); importCount=importCount+1 end end
+            end
+        end
+    end
+    local localName=Key(LocalName())
+    for key,entry in pairs(GuildSharedIgnoreDB.players) do
+        local isLegacyImport=entry and entry.category=="Other" and entry.note=="Ignore List"
+        if entry and (entry.category=="Ignore List" or isLegacyImport) and Key(entry.addedBy)==localName and not ignored[key] then
+            GSI.RemovePlayer(entry.name)
         end
     end
     SendImportBatch(imported)
+    if importCount>0 then Print("Imported "..importCount.." player(s) from the Blizzard ignore list.") end
+    if GSI.RefreshList then GSI.RefreshList() end
 end
 local function RefreshGuildClassCache()
     guildClassCache={}; if not IsInGuild() or not GetNumGuildMembers or not GetGuildRosterInfo then return end
-    for i=1,(GetNumGuildMembers() or 0) do local n,_,_,_,_,_,_,_,_,_,class=GetGuildRosterInfo(i); local k=Key(n); if k and class then guildClassCache[k]=class end end
+    for i=1,(GetNumGuildMembers(true) or 0) do local n,_,_,_,_,_,_,_,_,_,class=GetGuildRosterInfo(i); local k=Key(n); local classKey=ClassKey(n); if class and k then guildClassCache[k]=class; if classKey then guildClassCache[classKey]=class end end end
+end
+local function RememberLocalClass()
+    local name=UnitName("player"); local classKey=ClassKey(name); local _,class=UnitClass("player")
+    if classKey and class then GuildSharedIgnoreDB.characterClasses[classKey]=class end
 end
 local function GetClassColor(name)
-    local k=Key(name); local class
-    if k==Key(LocalName()) then local _,c=UnitClass("player"); class=c else class=guildClassCache[k] end
+    local k=Key(name); local classKey=ClassKey(name); local class
+    if classKey==ClassKey(LocalName()) then local _,c=UnitClass("player"); class=c
+    else class=(k and guildClassCache[k]) or (classKey and guildClassCache[classKey]) or (classKey and GuildSharedIgnoreDB.characterClasses[classKey]) end
     if class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class] then local c=RAID_CLASS_COLORS[class]; return c.r,c.g,c.b end
     return 1,1,1
 end
 local function WarnAboutGroupMember(name)
     local key=Key(name); if not key or groupWarnedPlayers[key] then return end; local e=GuildSharedIgnoreDB.players[key]; if not e then return end
-    groupWarnedPlayers[key]=true; local msg="|cffff4444[GSI WARNING]|r "..(e.name or name).." is on the GuildSharedIgnore list"; if e.category~="Other" then msg=msg.." ["..e.category.."]" end; if e.note~="" then msg=msg..": "..e.note end; Print(msg)
+    groupWarnedPlayers[key]=true; local msg="|cffff4444[GSI WARNING]|r "..(e.name or name).." is on the GuildSharedIgnore list"; if e.category~="Other" then msg=msg.." ["..e.category.."]" end; if e.note~="" then msg=msg..": "..e.note end; Print(msg,true)
     if RaidNotice_AddMessage and RaidWarningFrame and ChatTypeInfo and ChatTypeInfo.RAID_WARNING then RaidNotice_AddMessage(RaidWarningFrame,"|cffff3333[GSI] "..(e.name or name).." is on the ignore list!|r",ChatTypeInfo.RAID_WARNING) end
 end
 local function CheckGroupMembers()
@@ -462,20 +508,21 @@ function GSI.GetClassColor(name) return GetClassColor(name) end
 function GSI.SetSortState(column,ascending) GSI.sortColumn=column; GSI.sortAscending=ascending end
 function GSI.GetSortState() return GSI.sortColumn,GSI.sortAscending end
 local eventFrame=CreateFrame("Frame","GuildSharedIgnoreEventFrame")
-eventFrame:RegisterEvent("ADDON_LOADED"); eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD"); eventFrame:RegisterEvent("CHAT_MSG_ADDON"); eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE"); eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE"); eventFrame:RegisterEvent("PARTY_INVITE_REQUEST")
+eventFrame:RegisterEvent("ADDON_LOADED"); eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD"); eventFrame:RegisterEvent("CHAT_MSG_ADDON"); eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE"); eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE"); eventFrame:RegisterEvent("PARTY_INVITE_REQUEST"); eventFrame:RegisterEvent("IGNORELIST_UPDATE")
 eventFrame:SetScript("OnEvent",function(self,event,...)
     if event=="ADDON_LOADED" then
         local addonName=...; if addonName~=ADDON_NAME then return end
-        InitializeDB(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters(); RefreshGuildClassCache(); ImportBlizzardIgnoreList(); if GSI.RefreshList then GSI.RefreshList() end
+        InitializeDB(); RememberLocalClass(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters(); RefreshGuildClassCache(); ImportBlizzardIgnoreList(); if GSI.RefreshList then GSI.RefreshList() end
         if C_Timer and C_Timer.After then
             C_Timer.After(3,function() if IsInGuild() then RefreshGuildClassCache(); CheckGroupMembers(); RequestSync() end end)
             if C_Timer.NewTicker and not autoTickerStarted then autoTickerStarted=true; syncNextAuto=time()+AUTO_SYNC_INTERVAL; C_Timer.NewTicker(AUTO_SYNC_INTERVAL,function() if IsInGuild() then RequestSync() end end) end
         end
         Print("Loaded v"..VERSION)
     elseif event=="PLAYER_ENTERING_WORLD" then
-        InitializeDB(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters()
+        InitializeDB(); RememberLocalClass(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters()
         if C_Timer and C_Timer.After then C_Timer.After(2,function() RefreshGuildClassCache(); ImportBlizzardIgnoreList(); CheckGroupMembers(); if GSI.RefreshList then GSI.RefreshList() end end); C_Timer.After(5,function() if IsInGuild() then RequestSync() end end) end
     elseif event=="GUILD_ROSTER_UPDATE" then RefreshGuildClassCache(); if GSI.RefreshList then GSI.RefreshList() end
+    elseif event=="IGNORELIST_UPDATE" then ImportBlizzardIgnoreList()
     elseif event=="GROUP_ROSTER_UPDATE" then CheckGroupMembers()
     elseif event=="PARTY_INVITE_REQUEST" then HandlePartyInvite(...)
     elseif event=="CHAT_MSG_ADDON" then HandleMessage(...)
