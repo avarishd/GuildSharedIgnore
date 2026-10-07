@@ -13,7 +13,7 @@ local sortAscending=true
 local RefreshList
 local AnnounceRemovedPlayer
 local RemoveEntry
-local versionText,githubCopyFrame,footerGithub
+local versionText,githubCopyFrame,githubClickCatcher,footerGithub
 local syncStatusText
 local categoryDropDownCounter=0
 local openCategoryMenu
@@ -745,6 +745,23 @@ local function ShowGitHubCopyBox()
 if not footerGithub then
 return
 end
+if not githubClickCatcher then
+githubClickCatcher=CreateFrame("Button",nil,UIParent)
+githubClickCatcher:SetAllPoints(UIParent)
+githubClickCatcher:SetFrameStrata("FULLSCREEN_DIALOG")
+githubClickCatcher:SetFrameLevel(150)
+githubClickCatcher:EnableMouse(true)
+githubClickCatcher:Hide()
+githubClickCatcher:SetScript("OnMouseDown",function()
+if githubCopyFrame and githubCopyFrame:IsShown() then
+    githubCopyFrame:Hide()
+    githubClickCatcher:Hide()
+    if githubCopyFrame.editBox then
+        githubCopyFrame.editBox:ClearFocus()
+    end
+end
+end)
+end
 if not githubCopyFrame then
 githubCopyFrame=CreateFrame("Frame",nil,UIParent)
 githubCopyFrame:SetSize(390,72)
@@ -769,10 +786,17 @@ box:SetText("https://github.com/avarishd/GuildSharedIgnore")
 githubCopyFrame.editBox=box
 box:SetScript("OnEscapePressed",function()
 githubCopyFrame:Hide()
+githubClickCatcher:Hide()
 box:ClearFocus()
 end)
 box:SetScript("OnEnterPressed",function()
 box:HighlightText()
+end)
+box:SetScript("OnEditFocusLost",function()
+if githubCopyFrame and githubCopyFrame:IsShown() then
+    githubCopyFrame:Hide()
+    githubClickCatcher:Hide()
+end
 end)
 githubCopyFrame:SetScript("OnMouseDown",function()
 box:SetFocus()
@@ -783,6 +807,8 @@ githubCopyFrame:ClearAllPoints()
 githubCopyFrame:SetPoint("BOTTOMLEFT",footerGithub,"TOPLEFT",-8,5)
 githubCopyFrame:Show()
 githubCopyFrame:Raise()
+githubClickCatcher:Show()
+githubClickCatcher:SetFrameLevel(githubCopyFrame:GetFrameLevel()-1)
 githubCopyFrame.editBox:SetFocus()
 githubCopyFrame.editBox:HighlightText()
 end

@@ -74,8 +74,47 @@ local function IsLocalSender(sender)
     end
     return localRealm~="" and RealmKey(senderRealm)==RealmKey(localRealm)
 end
+local function GetMajorVersion(version)
+    local major=tostring(version or "0"):match("^(%d+)")
+    return tonumber(major) or 0
+end
+
+local function ResetGuildSharedIgnoreDatabase()
+    local defaults={
+        players={},
+        tombstones={},
+        characterClasses={},
+        changeLog={},
+        logicalClock=0,
+        databaseRevision=0,
+        lastSyncTime=0,
+        protocol=PROTOCOL,
+        announceGuild=false,
+        muteMessages=true,
+        confirmDelete=true,
+        guiAlpha=1,
+        _version=VERSION
+    }
+    for key,value in pairs(defaults) do
+        GuildSharedIgnoreDB[key]=value
+    end
+    if GSI and GSI.RefreshList then GSI.RefreshList() end
+    Print("Database reset for new major version v"..VERSION..".")
+end
+
 local function InitializeDB()
     GuildSharedIgnoreDB=GuildSharedIgnoreDB or {}
+
+    local previousVersion=GuildSharedIgnoreDB._version or GuildSharedIgnoreDB.version
+    local previousMajor=GetMajorVersion(previousVersion)
+    local currentMajor=GetMajorVersion(VERSION)
+    local hasLegacyData=(GuildSharedIgnoreDB.players and next(GuildSharedIgnoreDB.players)~=nil) or (GuildSharedIgnoreDB.tombstones and next(GuildSharedIgnoreDB.tombstones)~=nil) or (GuildSharedIgnoreDB.changeLog and #GuildSharedIgnoreDB.changeLog>0)
+    if previousVersion and previousMajor~=0 and currentMajor>previousMajor then
+        ResetGuildSharedIgnoreDatabase()
+    elseif previousVersion==nil and hasLegacyData then
+        ResetGuildSharedIgnoreDatabase()
+    end
+
     GuildSharedIgnoreDB.players=GuildSharedIgnoreDB.players or {}
     GuildSharedIgnoreDB.tombstones=GuildSharedIgnoreDB.tombstones or {}
     GuildSharedIgnoreDB.characterClasses=GuildSharedIgnoreDB.characterClasses or {}
@@ -88,6 +127,8 @@ local function InitializeDB()
     if GuildSharedIgnoreDB.announceGuild==nil then GuildSharedIgnoreDB.announceGuild=false end
     if GuildSharedIgnoreDB.muteMessages==nil then GuildSharedIgnoreDB.muteMessages=true end
     if GuildSharedIgnoreDB.confirmDelete==nil then GuildSharedIgnoreDB.confirmDelete=true end
+    if GuildSharedIgnoreDB.guiAlpha==nil then GuildSharedIgnoreDB.guiAlpha=1 end
+    GuildSharedIgnoreDB._version=VERSION
     local maxRevision=GuildSharedIgnoreDB.logicalClock
     for key,e in pairs(GuildSharedIgnoreDB.players) do
         if e then
