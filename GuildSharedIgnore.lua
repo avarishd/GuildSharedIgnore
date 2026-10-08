@@ -4,6 +4,7 @@ local VERSION=GetAddOnMetadata(ADDON_NAME,"Version")
 local PROTOCOL=2
 local MAX_PACKET=240
 local SYNC_TIMEOUT=10
+local SYNC_SETTLE_DELAY=2
 local AUTO_SYNC_INTERVAL=300
 local ADDON_USER_TTL=86400
 local MAX_CHANGE_LOG=1000
@@ -16,6 +17,7 @@ local syncExpected={}
 local syncIgnoredSenders={}
 local syncChunks={}
 local syncDeleteChunks={}
+local syncFinishGeneration=0
 local syncImported=0
 local syncUpdated=0
 local syncDeleted=0
@@ -413,19 +415,6 @@ local function AppendChange(packet,loggedAt)
     log[#log+1]={packet=packet,time=tonumber(loggedAt) or time()}
     while #log>MAX_CHANGE_LOG do table.remove(log,1) end
 end
-local function BuildChangeSet(since)
-    since=tonumber(since) or 0; local entries={}; local deletes={}; local earliest=nil
-    for _,c in ipairs(GuildSharedIgnoreDB.changeLog) do
-        if c and c.packet then
-            earliest=earliest or tonumber(c.time) or 0
-            if (tonumber(c.time) or 0)>since then
-                if c.packet:sub(1,2)=="S|" then entries[#entries+1]=c.packet else deletes[#deletes+1]=c.packet end
-            end
-        end
-    end
-    table.sort(entries); table.sort(deletes)
-    return entries,deletes,earliest
-end
 local function BuildFullSet()
     local entries,deletes={},{ }
     for _,e in pairs(GuildSharedIgnoreDB.players) do if e then entries[#entries+1]=BuildEntryPacket(e) end end
@@ -448,11 +437,11 @@ local function SendChunked(kind,id,items,target)
     for i,payload in ipairs(chunks) do SendAddon("D|"..id.."|"..kind.."|"..i.."|"..total.."|"..HashString(payload).."|"..payload,target) end
     return total
 end
-local function SendSyncResponse(id,target,requestHash,requestLastSync)
-    local localHash=BuildDatabaseHash(); local mode="none"; local entries,deletes={},{}
+local function SendSyncResponse(id,target,requestHash)
+    local localHash=BuildDatabaseHash(); local mode="none"; local entries,deletes={},{ }
     if requestHash~=localHash then
-        local deltaE,deltaT,earliest=BuildChangeSet(requestLastSync)
-        if #GuildSharedIgnoreDB.changeLog>0 and (tonumber(requestLastSync) or 0)>=((earliest or 0)-1) and (#deltaE+#deltaT)>0 then entries,deletes=deltaE,deltaT; mode="delta" else entries,deletes=BuildFullSet(); mode="full" end
+        -- The requester's last-sync time is global, not specific to this peer.
+        entries,deletes=BuildFullSet(); mode="full"
     end
     local ec=#entries; local dc=#deletes
     SendAddon("V|"..PROTOCOL.."|"..id.."|"..Encode(LocalName()).."|"..Encode(VERSION).."|"..mode.."|"..ec.."|"..dc.."|"..localHash,target)
@@ -463,7 +452,8 @@ local function ApplyEntry(name,addedBy,rev,note,category,updatedBy,ts,recordChan
     name=Normalize(name); local k=Key(name); if not k then return false,false end
     rev=tonumber(rev) or tonumber(ts) or 0; ts=tonumber(ts) or time(); addedBy=Normalize(addedBy) or ""; updatedBy=Normalize(updatedBy) or addedBy or ""
     local e=GuildSharedIgnoreDB.players[k]; local t=GuildSharedIgnoreDB.tombstones[k]
-    if t and not IsNewer(rev,updatedBy,t.rev,t.updatedBy) then return false,false end
+    -- Revisions are local counters, so timestamps determine whether an entry predates a deletion.
+    if t and (ts<t.time or (ts==t.time and (updatedBy~=t.updatedBy or not IsNewer(rev,updatedBy,t.rev,t.updatedBy)))) then return false,false end
     if e and not IsNewer(rev,updatedBy,e.rev,e.updatedBy) then return false,false end
     if e and e.addedBy and e.addedBy~="" then addedBy=e.addedBy end
     local created=not e
@@ -476,8 +466,8 @@ local function ApplyDelete(name,rev,updatedBy,ts,recordChange)
     name=Normalize(name); local k=Key(name); if not k then return false end
     rev=tonumber(rev) or tonumber(ts) or 0; ts=tonumber(ts) or time(); updatedBy=Normalize(updatedBy) or ""
     local e=GuildSharedIgnoreDB.players[k]; local t=GuildSharedIgnoreDB.tombstones[k]
-    if e and not IsNewer(rev,updatedBy,e.rev,e.updatedBy) then return false end
-    if t and not IsNewer(rev,updatedBy,t.rev,t.updatedBy) then return false end
+    if e and ts<e.time then return false end
+    if t and (ts<t.time or (ts==t.time and not IsNewer(rev,updatedBy,t.rev,t.updatedBy))) then return false end
     GuildSharedIgnoreDB.players[k]=nil; GuildSharedIgnoreDB.tombstones[k]={name=name,time=ts,rev=rev,updatedBy=updatedBy}; AdvanceClock(rev)
     if recordChange then AppendChange(BuildDeletePacket(GuildSharedIgnoreDB.tombstones[k]),time()) end
     return true
@@ -490,7 +480,7 @@ local function ProcessSyncBuffers()
             for i=1,data.entryTotal do parts[i]=data.entries[i] end
             for i=1,data.deleteTotal do data.deletes[i]=data.deletes[i] end
             for i=1,data.entryTotal do local p=parts[i]; if p then local n,a,r,no,c,u,t=p:match("^S|([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)$"); if n then local ch,cr=ApplyEntry(Decode(n),Decode(a),r,Decode(no),Decode(c),Decode(u),t,true); if ch then if cr then imported=imported+1 else updated=updated+1 end end end end end
-            for i=1,data.deleteTotal do local p=data.deletes[i]; if p then local n,r,u,t=p:match("^T|([^|]*)|([^|]*)|([^|]*)$"); if n and ApplyDelete(Decode(n),r,Decode(u),t,true) then deleted=deleted+1 end end end
+            for i=1,data.deleteTotal do local p=data.deletes[i]; if p then local n,r,u,t=p:match("^T|([^|]*)|([^|]*)|([^|]*)|([^|]*)$"); if n and ApplyDelete(Decode(n),r,Decode(u),t,true) then deleted=deleted+1 end end end
         end
     end
     syncChunks={}; syncDeleteChunks={}; if GSI.RefreshList then GSI.RefreshList() end
@@ -521,32 +511,47 @@ local function AllExpectedComplete()
     for _,v in pairs(syncExpected) do any=true; if not v.complete then return false end end
     return any
 end
+local function ScheduleSyncFinish()
+    if not syncActive or not C_Timer or not C_Timer.After then return end
+    local hasComplete=false
+    for _,v in pairs(syncExpected) do if v.complete then hasComplete=true; break end end
+    if not hasComplete then return end
+    syncFinishGeneration=syncFinishGeneration+1
+    local generation=syncFinishGeneration
+    C_Timer.After(SYNC_SETTLE_DELAY,function()
+        if syncActive and generation==syncFinishGeneration and AllExpectedComplete() then FinishSync(true,"Complete") end
+    end)
+end
 local function RequestSync()
     if not IsInGuild() then UpdateSyncStatus("Failed","Not in a guild"); return false end
     if syncActive then return false end
     InitializeDB(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL)
-    syncID=GenerateSyncID(); syncStartedAt=time(); syncResponders={}; syncExpected={}; syncIgnoredSenders={}; syncChunks={}; syncDeleteChunks={}; syncImported=0; syncUpdated=0; syncDeleted=0; syncActive=true
+    syncID=GenerateSyncID(); syncStartedAt=time(); syncResponders={}; syncExpected={}; syncIgnoredSenders={}; syncChunks={}; syncDeleteChunks={}; syncFinishGeneration=0; syncImported=0; syncUpdated=0; syncDeleted=0; syncActive=true
     UpdateSyncStatus("Syncing","Database comparison")
     local msg="Q|"..PROTOCOL.."|"..syncID.."|"..Encode(LocalName()).."|"..BuildDatabaseHash().."|"..Encode(VERSION).."|"..tostring(GuildSharedIgnoreDB.lastSyncTime or 0)
     if not SendAddon(msg) then syncActive=false; UpdateSyncStatus("Failed","Addon messaging unavailable"); return false end
     if C_Timer and C_Timer.After then C_Timer.After(SYNC_TIMEOUT,function() if not syncActive then return end; if AllExpectedComplete() then FinishSync(true,"Complete") elseif CountResponders()>0 then FinishSync(true,"Partial") else FinishSync(false,"Timed out; no compatible responder • 0 responders") end end) end
     return true
 end
+local FinalizeResponder
 local function HandleChunk(sender,rid,kind,seq,total,checksum,payload)
     if not syncActive or rid~=syncID then return end
     local sk=Key(sender); local d=syncExpected[sk]
     if not d then d={entries={},deletes={},entryChunks=nil,deleteChunks=nil,entryTotal=0,deleteTotal=0,complete=false,invalid=false,preV=true}; syncExpected[sk]=d; syncResponders[sk]=true end
+    if d.complete then return end
     seq=tonumber(seq); total=tonumber(total); if not seq or not total or seq<1 or seq>total then return end
     if HashString(payload or "")~=checksum then d.invalid=true; return end
     local target=kind=="S" and d.entries or d.deletes; local expectedTotal=kind=="S" and d.entryChunks or d.deleteChunks
     if expectedTotal and expectedTotal~=total then d.invalid=true; return end
     if kind=="S" then d.entryChunks=total else d.deleteChunks=total end
     target[seq]=payload
+    if d.finalizeReceived then FinalizeResponder(sender,rid,d.mode,d.entryTotal,d.deleteTotal,d.entryChunks,d.deleteChunks,d.hash) end
 end
-local function FinalizeResponder(sender,rid,mode,ec,dc,et,dt,hash)
+FinalizeResponder=function(sender,rid,mode,ec,dc,et,dt,hash)
     if not syncActive or rid~=syncID then return end
     local sk=Key(sender); local d=syncExpected[sk]
     if not d then d={entries={},deletes={},entryChunks=nil,deleteChunks=nil,entryTotal=0,deleteTotal=0,complete=false,invalid=false,preV=true}; syncExpected[sk]=d; syncResponders[sk]=true end
+    d.finalizeReceived=true
     d.mode=mode; d.entryTotal=tonumber(ec) or 0; d.deleteTotal=tonumber(dc) or 0; d.entryChunks=tonumber(et) or 0; d.deleteChunks=tonumber(dt) or 0; d.hash=hash or d.hash
     if d.invalid then return end
     if d.entryChunks~=#d.entries or d.deleteChunks~=#d.deletes then return end
@@ -556,18 +561,18 @@ local function FinalizeResponder(sender,rid,mode,ec,dc,et,dt,hash)
     local flatT={}; for i=1,d.deleteChunks do for item in d.deletes[i]:gmatch("([^,]+)") do flatT[#flatT+1]=item end end
     if #flatE~=d.entryTotal or #flatT~=d.deleteTotal then d.invalid=true; return end
     d.entries=flatE; d.deletes=flatT; d.complete=true; syncResponders[sk]=true
-    if AllExpectedComplete() then FinishSync(true,mode=="delta" and "Incremental" or "Full") end
+    ScheduleSyncFinish()
 end
 local function HandleMessage(prefix,message,distribution,sender)
     if prefix~=PREFIX or not message then return end
     sender=Normalize(sender or ""); if not sender or IsLocalSender(sender) then return end
     local op=message:sub(1,2)
     if op=="Q|" then
-        local protocol,id,requester,hash,version,lastSync=message:match("^Q|(%d+)|([^|]+)|([^|]*)|([^|]*)|([^|]*)|(%d+)$")
+        local protocol,id,requester,hash,version=message:match("^Q|(%d+)|([^|]+)|([^|]*)|([^|]*)|([^|]*)|%d+$")
         if not protocol then return end
         protocol=tonumber(protocol); RegisterAddonUser(Decode(requester),Decode(version),protocol)
         if protocol~=PROTOCOL then SendAddon("X|"..tostring(protocol).."|"..Encode(VERSION).."|"..PROTOCOL,sender); return end
-        SendSyncResponse(id,sender,hash or "",tonumber(lastSync) or 0); return
+        SendSyncResponse(id,sender,hash or ""); return
     end
     if op=="X|" then local p,v,supported=message:match("^X|(%d+)|([^|]*)|(%d+)$"); RegisterAddonUser(sender,Decode(v),tonumber(p)); Print("Incompatible GuildSharedIgnore protocol from "..sender.." (peer "..tostring(p)..", local "..tostring(supported)..")."); return end
     if op=="B|" then
@@ -599,19 +604,20 @@ local function HandleMessage(prefix,message,distribution,sender)
         if Key(peerName)==Key(LocalName()) then syncIgnoredSenders[Key(sender)]=true; return end
         local sk=Key(sender); RegisterAddonUser(Decode(name),Decode(version),tonumber(protocol)); syncResponders[sk]=true
         local d=syncExpected[sk] or {}
-        d.entries=d.entries or {}; d.deletes=d.deletes or {}; d.entryChunks=d.entryChunks or 0; d.deleteChunks=d.deleteChunks or 0; d.entryTotal=tonumber(ec) or 0; d.deleteTotal=tonumber(dc) or 0; d.hash=hash or ""; d.complete=false; d.invalid=d.invalid or false; d.mode=mode; syncExpected[sk]=d
+        d.entries=d.entries or {}; d.deletes=d.deletes or {}; d.entryTotal=tonumber(ec) or 0; d.deleteTotal=tonumber(dc) or 0; d.hash=hash or ""; d.complete=d.complete or false; d.invalid=d.invalid or false; d.mode=mode; syncExpected[sk]=d
+        ScheduleSyncFinish()
         return
     end
     if op=="D|" then
         if syncIgnoredSenders[Key(sender)] then return end
         local rid,kind,seq,total,checksum,payload=message:match("^D|([^|]+)|([ST])|(%d+)|(%d+)|([^|]+)|(.+)$")
-        if rid then HandleChunk(sender,rid,kind,seq,total,checksum,payload) end
+        if rid then HandleChunk(sender,rid,kind,seq,total,checksum,payload); ScheduleSyncFinish() end
         return
     end
     if op=="E|" then
         if syncIgnoredSenders[Key(sender)] then return end
         local rid,mode,ec,dc,et,dt,hash=message:match("^E|([^|]+)|([^|]*)|(%d+)|(%d+)|(%d+)|(%d+)|([^|]*)$")
-        if rid then FinalizeResponder(sender,rid,mode,ec,dc,et,dt,hash) end
+        if rid then FinalizeResponder(sender,rid,mode,ec,dc,et,dt,hash); ScheduleSyncFinish() end
         return
     end
     if op=="A|" then local n,a,t,no,c,u,r=message:match("^A|([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)|([^|]*)$"); if n then local ch=ApplyEntry(Decode(n),Decode(a),r,Decode(no),Decode(c),Decode(u),t,true); if ch and GSI.RefreshList then GSI.RefreshList() end end; return end
