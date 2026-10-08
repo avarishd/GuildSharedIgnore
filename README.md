@@ -15,8 +15,8 @@ GuildSharedIgnore is made for **Legion 7.3.5 (Interface 70300)**. Guild members 
 
 - 📝 Add, edit, search, sort, and remove player reports.
 - 🔄 Sync list changes with guild members who use the addon.
-- 🛡️ Filter messages from listed players, warn about them in your party or raid, and automatically decline their party invitations.
-- 🔴 Hide Premade Groups led by players on the shared list and applications containing listed players by default, or show matching names in red using the **Hide listed LFG players** setting. When an application is shown, listed members are marked **GSI** instead of role icons, and its **Invite** button is removed.
+- 🛡️ Filter messages from listed players, warn about them in your party or raid, automatically decline their party invitations, and confirm before inviting listed players.
+- 🔴 Hide Premade Groups led by players on the shared list and applications containing listed players by default, or show matching names in red using the **Hide listed LFG players** setting. When an application is shown, listed members have their **Invite** button replaced with **Blocked by GSI**.
 - 📢 Optionally announce list changes in guild chat or mute the addon's chat messages.
 - 📥 Import WoW's Ignore List into a hidden **Ignore List** category.
 - 🎨 Adjust the interface opacity and resize the window.

@@ -25,6 +25,8 @@ local syncLastComplete=0
 local syncNextAuto=0
 local autoTickerStarted=false
 local chatFiltersRegistered=false
+local inviteUnitOriginal=nil
+local inviteUnitHooked=false
 local guildClassCache={}
 local addonUsers={}
 local groupWarnedPlayers={}
@@ -44,6 +46,13 @@ local function Normalize(name)
     name=tostring(name):gsub("^%s+",""):gsub("%s+$","")
     if name=="" then return nil end
     return name
+end
+local function DisplayName(name)
+    name=Normalize(name)
+    if not name then return nil end
+    return (name:gsub("(%a+)", function(part)
+        return part:sub(1,1):upper()..part:sub(2)
+    end))
 end
 local function Key(name)
     name=Normalize(name)
@@ -230,6 +239,29 @@ local function IsNewer(inRev,inBy,oldRev,oldBy)
 end
 local function GetEntry(name) local k=Key(name); return k and GuildSharedIgnoreDB.players[k] or nil end
 local function IsIgnored(name) return GetEntry(name)~=nil end
+local function HookInviteUnit()
+    if inviteUnitHooked or type(InviteUnit)~="function" or type(StaticPopup_Show)~="function" or type(StaticPopupDialogs)~="table" then return end
+    inviteUnitOriginal=InviteUnit
+    StaticPopupDialogs["GSI_CONFIRM_INVITE_LISTED"]={
+        text="|cffff4444%s is on the GuildSharedIgnore list.|r\nInvite anyway?",
+        button1="Invite",
+        button2=CANCEL,
+        OnAccept=function(self,data)
+            if data and data.name and inviteUnitOriginal then inviteUnitOriginal(data.name) end
+        end,
+        timeout=0,
+        whileDead=true,
+        hideOnEscape=true,
+        preferredIndex=3
+    }
+    InviteUnit=function(name,...)
+        local entry=GetEntry(name)
+        if not entry then return inviteUnitOriginal(name,...) end
+        local displayName=DisplayName(entry.name or name)
+        StaticPopup_Show("GSI_CONFIRM_INVITE_LISTED",displayName or Normalize(name),nil,{name=name})
+    end
+    inviteUnitHooked=true
+end
 local lfgSearchResultListHooked=false
 local lfgSearchEntryUpdateHooked=false
 local lfgApplicantListHooked=false
@@ -299,25 +331,23 @@ local function ColorListedApplicantMember(member,applicantID,memberIndex)
     local name=C_LFGList.GetApplicantMemberInfo(applicantID,memberIndex)
     if IsIgnored(name) then
         member.Name:SetTextColor(1,0.2,0.2)
-        if not member.gsiRoleLabel then
-            member.gsiRoleLabel=member:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-            member.gsiRoleLabel:SetPoint("LEFT",member.RoleIcon1,"LEFT",0,0)
-            member.gsiRoleLabel:SetPoint("RIGHT",member.RoleIcon3,"RIGHT",0,0)
-            member.gsiRoleLabel:SetJustifyH("CENTER")
-            member.gsiRoleLabel:SetTextColor(1,0.2,0.2)
-            member.gsiRoleLabel:SetText("GSI")
-        end
-        member.RoleIcon1:Hide()
-        member.RoleIcon2:Hide()
-        member.RoleIcon3:Hide()
-        member.gsiRoleLabel:Show()
-    elseif member.gsiRoleLabel then
-        member.gsiRoleLabel:Hide()
     end
 end
 local function HideInviteForListedApplicant(button,applicantID)
-    if button and button.InviteButton and IsApplicantIgnored(applicantID) then
+    if not button or not button.InviteButton then return end
+    if not button.gsiBlockedLabel then
+        button.gsiBlockedLabel=button:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+        button.gsiBlockedLabel:SetAllPoints(button.InviteButton)
+        button.gsiBlockedLabel:SetJustifyH("CENTER")
+        button.gsiBlockedLabel:SetJustifyV("MIDDLE")
+        button.gsiBlockedLabel:SetTextColor(1,0.2,0.2)
+        button.gsiBlockedLabel:SetText("Blocked by GSI")
+    end
+    if IsApplicantIgnored(applicantID) then
         button.InviteButton:Hide()
+        button.gsiBlockedLabel:Show()
+    else
+        button.gsiBlockedLabel:Hide()
     end
 end
 local function HookLFGSearchResults()
@@ -705,7 +735,7 @@ local eventFrame=CreateFrame("Frame","GuildSharedIgnoreEventFrame")
 eventFrame:RegisterEvent("ADDON_LOADED"); eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD"); eventFrame:RegisterEvent("CHAT_MSG_ADDON"); eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE"); eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE"); eventFrame:RegisterEvent("PARTY_INVITE_REQUEST"); eventFrame:RegisterEvent("IGNORELIST_UPDATE"); eventFrame:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED"); eventFrame:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED"); eventFrame:RegisterEvent("LFG_LIST_APPLICANT_LIST_UPDATED"); eventFrame:RegisterEvent("LFG_LIST_APPLICANT_UPDATED")
 eventFrame:SetScript("OnEvent",function(self,event,...)
     if event=="ADDON_LOADED" then
-        local addonName=...; HookLFGSearchResults(); if addonName~=ADDON_NAME then return end
+        local addonName=...; HookLFGSearchResults(); HookInviteUnit(); if addonName~=ADDON_NAME then return end
         InitializeDB(); RememberLocalClass(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters(); RefreshGuildClassCache(); ImportBlizzardIgnoreList(); if GSI.RefreshList then GSI.RefreshList() end
         if C_Timer and C_Timer.After then
             C_Timer.After(3,function() if IsInGuild() then RefreshGuildClassCache(); CheckGroupMembers(); RequestSync() end end)
@@ -713,7 +743,7 @@ eventFrame:SetScript("OnEvent",function(self,event,...)
         end
         Print("Loaded v"..VERSION)
     elseif event=="PLAYER_ENTERING_WORLD" then
-        HookLFGSearchResults()
+        HookLFGSearchResults(); HookInviteUnit()
         InitializeDB(); RememberLocalClass(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters()
         if C_Timer and C_Timer.After then C_Timer.After(2,function() RefreshGuildClassCache(); ImportBlizzardIgnoreList(); CheckGroupMembers(); if GSI.RefreshList then GSI.RefreshList() end end); C_Timer.After(5,function() if IsInGuild() then RequestSync() end end) end
     elseif event=="GUILD_ROSTER_UPDATE" then RefreshGuildClassCache(); if GSI.RefreshList then GSI.RefreshList() end
