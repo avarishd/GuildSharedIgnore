@@ -947,6 +947,9 @@ end
 UpdateColumns()
 UpdateVersionDisplay()
 UpdateSyncStatus()
+if GSI.RefreshLFGSearchRows then
+GSI.RefreshLFGSearchRows()
+end
 end
 GSI.RefreshList=RefreshList
 GSI.ClearAddFields=function()
@@ -1064,6 +1067,80 @@ whileDead=true,
 hideOnEscape=true,
 preferredIndex=3
 }
+local function CreateHideListedLFGSetting()
+local check=CreateFrame("CheckButton",nil,settingsPanel)
+check:SetSize(26,26)
+check:SetPoint("TOPLEFT",settingsPanel,"TOPLEFT",12,-203)
+check:SetFrameLevel(settingsPanel:GetFrameLevel()+2)
+check:EnableMouse(true)
+ApplyBackdrop(check,BG,BORDER)
+local mark=check:CreateFontString(nil,"OVERLAY","GameFontNormal")
+mark:SetAllPoints()
+mark:SetText("X")
+mark:SetJustifyH("CENTER")
+mark:SetJustifyV("MIDDLE")
+SetFontStringColor(mark,GREEN[1],GREEN[2],GREEN[3])
+check.mark=mark
+local label=settingsPanel:CreateFontString(nil,"OVERLAY","GameFontNormal")
+label:SetPoint("LEFT",check,"RIGHT",7,0)
+label:SetText("Hide listed LFG players")
+SetFontStringColor(label,TEXT[1],TEXT[2],TEXT[3])
+SetToggleTooltip(check,check,"Hide listed LFG players","When enabled, search groups led by listed players and applications containing listed players are hidden. When disabled, matching names appear in red.")
+check:SetChecked(GuildSharedIgnoreDB.hideListedLFGGroups)
+mark:SetShown(GuildSharedIgnoreDB.hideListedLFGGroups)
+check:SetScript("OnMouseDown",function(self,button)
+if button=="RightButton" then
+ClearInputFields()
+end
+end)
+check:SetScript("OnClick",function(self)
+local checked=self:GetChecked()
+GuildSharedIgnoreDB.hideListedLFGGroups=checked and true or false
+mark:SetShown(checked)
+if checked then
+SetFontStringColor(mark,GREEN[1],GREEN[2],GREEN[3])
+end
+if GSI.RefreshLFGSearchRows then
+GSI.RefreshLFGSearchRows()
+end
+end)
+end
+local function FinishUISetup()
+CreateNoteEditor()
+UpdateSortHeaders()
+UpdateColumns()
+RefreshList()
+UpdateVersionDisplay()
+UpdateSyncStatus()
+if C_Timer and C_Timer.NewTicker then
+C_Timer.NewTicker(1,function()
+if frame and frame:IsShown() then
+UpdateSyncStatus()
+end
+end)
+end
+end
+local function CreateResizeHandle()
+local resize=CreateFrame("Button",nil,frame)
+resize:SetSize(24,24)
+resize:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT",-1,1)
+resize:SetFrameLevel(110)
+resize:EnableMouse(true)
+resize:SetScript("OnMouseDown",function(self,button)
+if button=="RightButton" then
+ClearInputFields()
+elseif button=="LeftButton" then
+frame:StartSizing("BOTTOMRIGHT")
+end
+end)
+resize:SetScript("OnMouseUp",function(self,button)
+if button=="LeftButton" then
+frame:StopMovingOrSizing()
+UpdateColumns()
+RefreshList()
+end
+end)
+end
 local function CreateUI()
 if frame then
 return
@@ -1180,7 +1257,7 @@ settingsHighlight:SetSize(18,18)
 settingsHighlight:ClearAllPoints()
 settingsHighlight:SetPoint("CENTER")
 settingsPanel=CreateFrame("Frame",nil,frame)
-settingsPanel:SetSize(250,210)
+settingsPanel:SetSize(250,244)
 settingsPanel:SetFrameStrata("DIALOG")
 settingsPanel:SetFrameLevel(frame:GetFrameLevel()+100)
 settingsPanel:EnableMouse(true)
@@ -1449,6 +1526,7 @@ if checked then
 SetFontStringColor(deleteConfirmMark,GREEN[1],GREEN[2],GREEN[3])
 end
 end)
+CreateHideListedLFGSetting()
 local tableHeader=CreateFrame("Frame",nil,frame)
 tableHeader:SetPoint("TOPLEFT",frame,"TOPLEFT",9,-85)
 tableHeader:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-27,-85)
@@ -1584,38 +1662,8 @@ maximumHeight=340
 end
 frame:SetMinResize(math.floor(minimumWidth),340)
 frame:SetMaxResize(maximumWidth,maximumHeight)
-local resize=CreateFrame("Button",nil,frame)
-resize:SetSize(24,24)
-resize:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT",-1,1)
-resize:SetFrameLevel(110)
-resize:EnableMouse(true)
-resize:SetScript("OnMouseDown",function(self,button)
-if button=="RightButton" then
-ClearInputFields()
-elseif button=="LeftButton" then
-frame:StartSizing("BOTTOMRIGHT")
-end
-end)
-resize:SetScript("OnMouseUp",function(self,button)
-if button=="LeftButton" then
-frame:StopMovingOrSizing()
-UpdateColumns()
-RefreshList()
-end
-end)
-CreateNoteEditor()
-UpdateSortHeaders()
-UpdateColumns()
-RefreshList()
-UpdateVersionDisplay()
-UpdateSyncStatus()
-if C_Timer and C_Timer.NewTicker then
-C_Timer.NewTicker(1,function()
-if frame and frame:IsShown() then
-UpdateSyncStatus()
-end
-end)
-end
+CreateResizeHandle()
+FinishUISetup()
 frame:Hide()
 end
 GSI.CreateUI=CreateUI

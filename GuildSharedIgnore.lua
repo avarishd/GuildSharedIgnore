@@ -92,6 +92,7 @@ local function ResetGuildSharedIgnoreDatabase()
         announceGuild=false,
         muteMessages=true,
         confirmDelete=true,
+        hideListedLFGGroups=true,
         guiAlpha=1,
         _version=VERSION
     }
@@ -127,6 +128,7 @@ local function InitializeDB()
     if GuildSharedIgnoreDB.announceGuild==nil then GuildSharedIgnoreDB.announceGuild=false end
     if GuildSharedIgnoreDB.muteMessages==nil then GuildSharedIgnoreDB.muteMessages=true end
     if GuildSharedIgnoreDB.confirmDelete==nil then GuildSharedIgnoreDB.confirmDelete=true end
+    if GuildSharedIgnoreDB.hideListedLFGGroups==nil then GuildSharedIgnoreDB.hideListedLFGGroups=true end
     if GuildSharedIgnoreDB.guiAlpha==nil then GuildSharedIgnoreDB.guiAlpha=1 end
     GuildSharedIgnoreDB._version=VERSION
     local maxRevision=GuildSharedIgnoreDB.logicalClock
@@ -228,6 +230,138 @@ local function IsNewer(inRev,inBy,oldRev,oldBy)
 end
 local function GetEntry(name) local k=Key(name); return k and GuildSharedIgnoreDB.players[k] or nil end
 local function IsIgnored(name) return GetEntry(name)~=nil end
+local lfgSearchResultListHooked=false
+local lfgSearchEntryUpdateHooked=false
+local lfgApplicantListHooked=false
+local lfgApplicantMemberHooked=false
+local lfgApplicantUpdateHooked=false
+local function FilterLFGSearchResults(panel)
+    if not panel or not panel.results or not C_LFGList or not C_LFGList.GetSearchResultInfo then return end
+    if not GuildSharedIgnoreDB.hideListedLFGGroups then return end
+    local function RemoveIgnoredResults(results)
+        local filteredCount=0
+        for i=#results,1,-1 do
+            local resultID=results[i]
+            local _,_,_,_,_,_,_,_,_,_,_,_,leaderName=C_LFGList.GetSearchResultInfo(resultID)
+            if IsIgnored(leaderName) then
+                table.remove(results,i)
+                filteredCount=filteredCount+1
+                if panel.selectedResult==resultID then panel.selectedResult=nil end
+            end
+        end
+        return filteredCount
+    end
+    local filteredCount=RemoveIgnoredResults(panel.results)
+    if panel.applications then
+        RemoveIgnoredResults(panel.applications)
+    end
+    panel.totalResults=math.max(0,(tonumber(panel.totalResults) or 0)-filteredCount)
+end
+local function ColorListedLFGLeader(button)
+    if GuildSharedIgnoreDB.hideListedLFGGroups or not button or not button.resultID or not C_LFGList or not C_LFGList.GetSearchResultInfo then return end
+    local _,_,_,_,_,_,_,_,_,_,_,_,leaderName=C_LFGList.GetSearchResultInfo(button.resultID)
+    if IsIgnored(leaderName) then
+        if button.Name then button.Name:SetTextColor(1,0.2,0.2) end
+        if button.ActivityName then button.ActivityName:SetTextColor(1,0.2,0.2) end
+    end
+end
+local function IsApplicantIgnored(applicantID)
+    if not C_LFGList or not C_LFGList.GetApplicantInfo or not C_LFGList.GetApplicantMemberInfo then return false end
+    local _,_,_,numMembers=C_LFGList.GetApplicantInfo(applicantID)
+    for memberIndex=1,(tonumber(numMembers) or 0) do
+        local name=C_LFGList.GetApplicantMemberInfo(applicantID,memberIndex)
+        if IsIgnored(name) then return true end
+    end
+    return false
+end
+local function FilterLFGApplicants(panel)
+    if not GuildSharedIgnoreDB.hideListedLFGGroups or not panel or type(panel.applicants)~="table" then return end
+    local totalHeight=0
+    panel.applicantSizes={}
+    for i=#panel.applicants,1,-1 do
+        if IsApplicantIgnored(panel.applicants[i]) then
+            table.remove(panel.applicants,i)
+        end
+    end
+    for i,applicantID in ipairs(panel.applicants) do
+        local _,_,_,numMembers=C_LFGList.GetApplicantInfo(applicantID)
+        numMembers=tonumber(numMembers) or 0
+        panel.applicantSizes[i]=numMembers
+        totalHeight=totalHeight+LFGListApplicationViewerUtil_GetButtonHeight(numMembers)
+    end
+    panel.totalApplicantHeight=totalHeight
+    if LFGListApplicationViewer_UpdateAvailability then
+        LFGListApplicationViewer_UpdateAvailability(panel)
+    end
+end
+local function ColorListedApplicantMember(member,applicantID,memberIndex)
+    if GuildSharedIgnoreDB.hideListedLFGGroups or not member or not C_LFGList or not C_LFGList.GetApplicantMemberInfo then return end
+    local name=C_LFGList.GetApplicantMemberInfo(applicantID,memberIndex)
+    if IsIgnored(name) then
+        member.Name:SetTextColor(1,0.2,0.2)
+        if not member.gsiRoleLabel then
+            member.gsiRoleLabel=member:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+            member.gsiRoleLabel:SetPoint("LEFT",member.RoleIcon1,"LEFT",0,0)
+            member.gsiRoleLabel:SetPoint("RIGHT",member.RoleIcon3,"RIGHT",0,0)
+            member.gsiRoleLabel:SetJustifyH("CENTER")
+            member.gsiRoleLabel:SetTextColor(1,0.2,0.2)
+            member.gsiRoleLabel:SetText("GSI")
+        end
+        member.RoleIcon1:Hide()
+        member.RoleIcon2:Hide()
+        member.RoleIcon3:Hide()
+        member.gsiRoleLabel:Show()
+    elseif member.gsiRoleLabel then
+        member.gsiRoleLabel:Hide()
+    end
+end
+local function HideInviteForListedApplicant(button,applicantID)
+    if button and button.InviteButton and IsApplicantIgnored(applicantID) then
+        button.InviteButton:Hide()
+    end
+end
+local function HookLFGSearchResults()
+    if not hooksecurefunc then return end
+    if not lfgSearchResultListHooked and type(LFGListSearchPanel_UpdateResultList)=="function" then
+        hooksecurefunc("LFGListSearchPanel_UpdateResultList",FilterLFGSearchResults)
+        lfgSearchResultListHooked=true
+    end
+    if not lfgSearchEntryUpdateHooked and type(LFGListSearchEntry_Update)=="function" then
+        hooksecurefunc("LFGListSearchEntry_Update",ColorListedLFGLeader)
+        lfgSearchEntryUpdateHooked=true
+    end
+    if not lfgApplicantListHooked and type(LFGListApplicationViewer_UpdateResultList)=="function" then
+        hooksecurefunc("LFGListApplicationViewer_UpdateResultList",FilterLFGApplicants)
+        lfgApplicantListHooked=true
+    end
+    if not lfgApplicantMemberHooked and type(LFGListApplicationViewer_UpdateApplicantMember)=="function" then
+        hooksecurefunc("LFGListApplicationViewer_UpdateApplicantMember",ColorListedApplicantMember)
+        lfgApplicantMemberHooked=true
+    end
+    if not lfgApplicantUpdateHooked and type(LFGListApplicationViewer_UpdateApplicant)=="function" then
+        hooksecurefunc("LFGListApplicationViewer_UpdateApplicant",HideInviteForListedApplicant)
+        lfgApplicantUpdateHooked=true
+    end
+end
+function GSI.RefreshLFGSearchRows()
+    HookLFGSearchResults()
+    if type(LFGListSearchPanel_UpdateResultList)=="function" and type(LFGListSearchPanel_UpdateResults)=="function" then
+        local panel=LFGListFrame and LFGListFrame.SearchPanel
+        if panel and panel.results then
+            LFGListSearchPanel_UpdateResultList(panel)
+            LFGListSearchPanel_UpdateResults(panel)
+        end
+    end
+    if type(LFGListApplicationViewer_UpdateResultList)=="function" and type(LFGListApplicationViewer_UpdateResults)=="function" and C_LFGList and C_LFGList.GetActiveEntryInfo and C_LFGList.GetApplicants then
+        local panel=LFGListFrame and LFGListFrame.ApplicationViewer
+        local active=C_LFGList.GetActiveEntryInfo()
+        local applicants=C_LFGList.GetApplicants()
+        if active and panel and panel:IsShown() and type(applicants)=="table" then
+            LFGListApplicationViewer_UpdateResultList(panel)
+            LFGListApplicationViewer_UpdateResults(panel)
+        end
+    end
+end
 local function FormatDate(ts) return ts and tonumber(ts) and date("%Y-%m-%d %H:%M",tonumber(ts)) or "" end
 local function BuildEntryPacket(e)
     return table.concat({"S",Encode(e.name),Encode(e.addedBy),tostring(e.rev or 0),Encode(e.note),Encode(e.category),Encode(e.updatedBy),tostring(e.time or 0)} ,"|")
@@ -568,10 +702,10 @@ function GSI.GetClassColor(name) return GetClassColor(name) end
 function GSI.SetSortState(column,ascending) GSI.sortColumn=column; GSI.sortAscending=ascending end
 function GSI.GetSortState() return GSI.sortColumn,GSI.sortAscending end
 local eventFrame=CreateFrame("Frame","GuildSharedIgnoreEventFrame")
-eventFrame:RegisterEvent("ADDON_LOADED"); eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD"); eventFrame:RegisterEvent("CHAT_MSG_ADDON"); eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE"); eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE"); eventFrame:RegisterEvent("PARTY_INVITE_REQUEST"); eventFrame:RegisterEvent("IGNORELIST_UPDATE")
+eventFrame:RegisterEvent("ADDON_LOADED"); eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD"); eventFrame:RegisterEvent("CHAT_MSG_ADDON"); eventFrame:RegisterEvent("GUILD_ROSTER_UPDATE"); eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE"); eventFrame:RegisterEvent("PARTY_INVITE_REQUEST"); eventFrame:RegisterEvent("IGNORELIST_UPDATE"); eventFrame:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED"); eventFrame:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED"); eventFrame:RegisterEvent("LFG_LIST_APPLICANT_LIST_UPDATED"); eventFrame:RegisterEvent("LFG_LIST_APPLICANT_UPDATED")
 eventFrame:SetScript("OnEvent",function(self,event,...)
     if event=="ADDON_LOADED" then
-        local addonName=...; if addonName~=ADDON_NAME then return end
+        local addonName=...; HookLFGSearchResults(); if addonName~=ADDON_NAME then return end
         InitializeDB(); RememberLocalClass(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters(); RefreshGuildClassCache(); ImportBlizzardIgnoreList(); if GSI.RefreshList then GSI.RefreshList() end
         if C_Timer and C_Timer.After then
             C_Timer.After(3,function() if IsInGuild() then RefreshGuildClassCache(); CheckGroupMembers(); RequestSync() end end)
@@ -579,10 +713,12 @@ eventFrame:SetScript("OnEvent",function(self,event,...)
         end
         Print("Loaded v"..VERSION)
     elseif event=="PLAYER_ENTERING_WORLD" then
+        HookLFGSearchResults()
         InitializeDB(); RememberLocalClass(); RegisterPrefix(); RegisterAddonUser(LocalName(),VERSION,PROTOCOL); RegisterChatFilters()
         if C_Timer and C_Timer.After then C_Timer.After(2,function() RefreshGuildClassCache(); ImportBlizzardIgnoreList(); CheckGroupMembers(); if GSI.RefreshList then GSI.RefreshList() end end); C_Timer.After(5,function() if IsInGuild() then RequestSync() end end) end
     elseif event=="GUILD_ROSTER_UPDATE" then RefreshGuildClassCache(); if GSI.RefreshList then GSI.RefreshList() end
     elseif event=="IGNORELIST_UPDATE" then ImportBlizzardIgnoreList()
+    elseif event=="LFG_LIST_SEARCH_RESULTS_RECEIVED" or event=="LFG_LIST_SEARCH_RESULT_UPDATED" or event=="LFG_LIST_APPLICANT_LIST_UPDATED" or event=="LFG_LIST_APPLICANT_UPDATED" then HookLFGSearchResults(); if GSI.RefreshLFGSearchRows then GSI.RefreshLFGSearchRows() end
     elseif event=="GROUP_ROSTER_UPDATE" then CheckGroupMembers()
     elseif event=="PARTY_INVITE_REQUEST" then HandlePartyInvite(...)
     elseif event=="CHAT_MSG_ADDON" then HandleMessage(...)
